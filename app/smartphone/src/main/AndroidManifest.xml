@@ -32,6 +32,9 @@
         android:theme="@style/Theme.M3U.Starting"
         android:usesCleartextTraffic="true"
         tools:targetApi="tiramisu">
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.m3u.smartphone.cast.M3UCastOptionsProvider" />
 
         <activity
             android:name=".MainActivity"

@@ -122,6 +122,8 @@ dependencies {
     implementation(libs.androidx.startup.runtime)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.google.material)
+    implementation(libs.google.cast.framework)
+    implementation(libs.androidx.mediarouter)
     // lifecycle
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

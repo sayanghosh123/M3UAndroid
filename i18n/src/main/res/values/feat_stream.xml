@@ -18,10 +18,23 @@
     <string name="feat_channel_tooltip_screen_rotating">screen rotating</string>
     <string name="feat_channel_tooltip_choose_format">choose format</string>
 
+    <string name="feat_channel_dialog_cast_targets">Cast &amp; external playback</string>
+    <string name="feat_channel_dialog_google_cast">Chromecast / Google Cast</string>
+    <string name="feat_channel_dialog_google_cast_hint">Chromecast, Google TV Streamer, Nest displays</string>
+    <string name="feat_channel_dialog_google_cast_connected">Connected to %s</string>
     <string name="feat_channel_dialog_dlna_devices">DLNA Devices</string>
     <string name="feat_channel_dialog_choose_tracks">Choose Tracks</string>
 
     <string name="feat_channel_open_in_external_app">open in external app</string>
+
+    <string name="feat_channel_cast_error_unavailable">Google Cast is not available on this phone</string>
+    <string name="feat_channel_cast_error_no_channel">start playback on your phone first</string>
+    <string name="feat_channel_cast_error_non_http">Chromecast can only open http or https stream URLs</string>
+    <string name="feat_channel_cast_error_drm">Chromecast sender does not support DRM-protected streams yet</string>
+    <string name="feat_channel_cast_warning_user_agent">this playlist uses a custom user agent, so Chromecast playback may fail</string>
+    <string name="feat_channel_cast_started">casting to %s; use the Cast dialog or your TV remote for playback controls</string>
+    <string name="feat_channel_cast_error_load">Chromecast could not start playback</string>
+    <string name="feat_channel_cast_error_load_with_reason">Chromecast could not start playback (%s)</string>
 
     <string name="feat_channel_cw_position_title">Last played at %s</string>
     <string name="feat_channel_cw_position_button">Rewind</string>

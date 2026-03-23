@@ -21,6 +21,7 @@ auto-ksp = "1.2.0"
 glance = "1.1.1"
 google-accompanist = "0.37.3"
 google-dagger = "2.58" # 2.59 requires AGP9+
+google-cast-framework = "22.3.0"
 
 haze = "1.7.1"
 io-coil = "2.7.0"
@@ -54,6 +55,7 @@ androidx-graphics-shapes = "1.1.0"
 minabox = "1.10.0"
 ktor-server = "3.4.0"
 mm2d-mmupnp = "3.1.6"
+androidx-mediarouter = "1.8.1"
 profileinstaller = "1.4.1"
 jakewharton-disklrucache = "2.0.2"
 acra = "5.13.1"
@@ -132,8 +134,10 @@ google-accompanist-permissions = { group = "com.google.accompanist", name = "acc
 
 google-dagger-hilt = { group = "com.google.dagger", name = "hilt-android", version.ref = "google-dagger" }
 google-dagger-hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "google-dagger" }
+google-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "google-cast-framework" }
 
 google-material = { group = "com.google.android.material", name = "material", version.ref = "com-google-android-material" }
+androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "androidx-mediarouter" }
 
 kotlinpoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinpoet" }
 kotlinpoet-ksp = { module = "com.squareup:kotlinpoet-ksp", version.ref = "kotlinpoet" }

@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.m3u.core.extension.Utils
 import com.m3u.i18n.R.string
+import com.m3u.smartphone.cast.GoogleCastBootstrap
 import dagger.hilt.android.HiltAndroidApp
 import org.acra.config.mailSender
 import org.acra.config.notification
@@ -26,6 +27,7 @@ class M3UApplication : Application(), Configuration.Provider {
             Timber.plant(DebugTree())
         }
         Utils.init(this)
+        GoogleCastBootstrap.initialize(this)
     }
 
     override fun attachBaseContext(base: Context?) {

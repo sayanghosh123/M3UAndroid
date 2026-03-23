@@ -9,6 +9,8 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
@@ -42,7 +44,10 @@ import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.mediarouter.app.MediaRouteButton
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.google.android.gms.cast.framework.CastButtonFactory
 import com.google.accompanist.permissions.rememberPermissionState
 import com.m3u.business.channel.ChannelViewModel
 import com.m3u.business.channel.PlayerState
@@ -83,6 +88,7 @@ fun ChannelRoute(
     modifier: Modifier = Modifier,
     viewModel: ChannelViewModel = hiltViewModel(),
 ) {
+    val googleCastViewModel: ChromecastViewModel = hiltViewModel()
     val openInExternalPlayerString = stringResource(string.feat_channel_open_in_external_app)
 
     val helper = LocalHelper.current
@@ -103,6 +109,7 @@ fun ChannelRoute(
     val devices = viewModel.devices
     val isDevicesVisible by viewModel.isDevicesVisible.collectAsStateWithLifecycle()
     val searching by viewModel.searching.collectAsStateWithLifecycle()
+    val castState by googleCastViewModel.castState.collectAsStateWithLifecycle()
 
     val tracks by viewModel.tracks.collectAsStateWithLifecycle(emptyMap())
     val selectedFormats by viewModel.currentTracks.collectAsStateWithLifecycle(emptyMap())
@@ -125,6 +132,7 @@ fun ChannelRoute(
     var isPipMode by remember { mutableStateOf(false) }
     var isAutoZappingMode by remember { mutableStateOf(true) }
     var choosing by remember { mutableStateOf(false) }
+    var openGoogleCastDialog by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val brightnessGesture by preferenceOf(PreferencesKeys.BRIGHTNESS_GESTURE)
     val volumeGesture by preferenceOf(PreferencesKeys.VOLUME_GESTURE)
@@ -328,12 +336,28 @@ fun ChannelRoute(
         modifier = modifier
     )
 
+    if (castState.isAvailable) {
+        GoogleCastRoutePickerBridge(
+            onReady = { openGoogleCastDialog = it },
+            modifier = Modifier
+                .size(1.dp)
+                .alpha(0f)
+        )
+    }
+
     DlnaDevicesBottomSheet(
         maskState = maskState,
         searching = searching,
         isDevicesVisible = isDevicesVisible,
         devices = devices,
+        isGoogleCastAvailable = castState.isAvailable,
+        connectedGoogleCastDeviceName = castState.deviceName.takeIf { castState.isConnected },
         connectDlnaDevice = { viewModel.connectDlnaDevice(it) },
+        openGoogleCastDevices = {
+            val launcher = openGoogleCastDialog ?: return@DlnaDevicesBottomSheet
+            viewModel.closeDlnaDevices()
+            googleCastViewModel.openGoogleCastDevices(launcher)
+        },
         openInExternalPlayer = {
             val channelUrl = channel?.url ?: return@DlnaDevicesBottomSheet
             context.startActivity(
@@ -357,6 +381,22 @@ fun ChannelRoute(
         onClearTrack = { type ->
             viewModel.clearTrack(type)
         }
+    )
+}
+
+@Composable
+private fun GoogleCastRoutePickerBridge(
+    onReady: (() -> Unit) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AndroidView(
+        factory = { context ->
+            MediaRouteButton(context).apply {
+                CastButtonFactory.setUpMediaRouteButton(context, this)
+                onReady { performClick() }
+            }
+        },
+        modifier = modifier
     )
 }
 

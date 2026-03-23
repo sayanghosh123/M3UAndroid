@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -40,15 +41,20 @@ internal fun DlnaDevicesBottomSheet(
     isDevicesVisible: Boolean,
     devices: List<Device>,
     searching: Boolean,
+    isGoogleCastAvailable: Boolean,
+    connectedGoogleCastDeviceName: String?,
     maskState: MaskState,
     onDismiss: () -> Unit,
     connectDlnaDevice: (device: Device) -> Unit,
+    openGoogleCastDevices: () -> Unit,
     openInExternalPlayer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalSpacing.current
     val state = rememberModalBottomSheetState()
 
+    val castTargetsString = stringResource(string.feat_channel_dialog_cast_targets)
+    val googleCastString = stringResource(string.feat_channel_dialog_google_cast)
     val openInExternalPlayerString = stringResource(string.feat_channel_open_in_external_app)
 
     LaunchedEffect(isDevicesVisible) {
@@ -79,19 +85,10 @@ internal fun DlnaDevicesBottomSheet(
                     )
                 ) {
                     Text(
-                        text = stringResource(string.feat_channel_dialog_dlna_devices),
+                        text = castTargetsString,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    UnstableBadge(UnstableValue.EXPERIMENTAL)
-                    Spacer(
-                        modifier = Modifier.weight(1f)
-                    )
-                    AnimatedVisibility(
-                        visible = searching
-                    ) {
-                        CircularProgressIndicator()
-                    }
                 }
                 LazyColumn(
                     modifier = Modifier
@@ -99,6 +96,34 @@ internal fun DlnaDevicesBottomSheet(
                             maxHeight = 320.dp
                         )
                 ) {
+                    if (isGoogleCastAvailable) {
+                        item {
+                            ListItem(
+                                headlineContent = {
+                                    Text(googleCastString)
+                                },
+                                supportingContent = {
+                                    Text(
+                                        connectedGoogleCastDeviceName?.let {
+                                            stringResource(
+                                                string.feat_channel_dialog_google_cast_connected,
+                                                it
+                                            )
+                                        } ?: stringResource(string.feat_channel_dialog_google_cast_hint)
+                                    )
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Cast,
+                                        contentDescription = googleCastString
+                                    )
+                                },
+                                modifier = Modifier.clickable {
+                                    openGoogleCastDevices()
+                                }
+                            )
+                        }
+                    }
                     item {
                         ListItem(
                             headlineContent = {
@@ -114,6 +139,29 @@ internal fun DlnaDevicesBottomSheet(
                                 openInExternalPlayer()
                             }
                         )
+                    }
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                            modifier = Modifier.padding(
+                                horizontal = spacing.medium,
+                                vertical = spacing.small
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(string.feat_channel_dialog_dlna_devices),
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            UnstableBadge(UnstableValue.EXPERIMENTAL)
+                            Spacer(modifier = Modifier.weight(1f))
+                            AnimatedVisibility(
+                                visible = searching
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
                     }
                     items(devices) { device ->
                         DlnaDeviceItem(

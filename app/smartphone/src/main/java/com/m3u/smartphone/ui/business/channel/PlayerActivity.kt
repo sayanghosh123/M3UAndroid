@@ -3,7 +3,6 @@ package com.m3u.smartphone.ui.business.channel
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -12,12 +11,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.appcompat.app.AppCompatActivity
 import com.m3u.business.channel.ChannelViewModel
 import com.m3u.core.Contracts
 import com.m3u.data.database.model.isSeries
 import com.m3u.data.repository.channel.ChannelRepository
 import com.m3u.data.repository.playlist.PlaylistRepository
 import com.m3u.data.service.MediaCommand
+import com.m3u.smartphone.cast.GoogleCastManager
 import com.m3u.smartphone.ui.common.helper.Helper
 import com.m3u.smartphone.ui.common.internal.Toolkit
 import com.m3u.smartphone.ui.material.components.Background
@@ -28,7 +29,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class PlayerActivity : ComponentActivity() {
+class PlayerActivity : AppCompatActivity() {
     private val viewModel: ChannelViewModel by viewModels()
 
     private val helper: Helper = Helper(this)
@@ -44,6 +45,9 @@ class PlayerActivity : ComponentActivity() {
 
     @Inject
     lateinit var playlistRepository: PlaylistRepository
+
+    @Inject
+    lateinit var googleCastManager: GoogleCastManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -120,7 +124,9 @@ class PlayerActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        viewModel.pauseOrContinue(true)
+        if (!googleCastManager.sessionState.value.isConnected) {
+            viewModel.pauseOrContinue(true)
+        }
     }
 
     override fun onPause() {
