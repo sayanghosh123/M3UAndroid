@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,8 +19,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -35,18 +38,26 @@ import com.m3u.business.foryou.ForyouViewModel
 import com.m3u.business.foryou.Recommend
 import com.m3u.core.foundation.components.AbsoluteSmoothCornerShape
 import com.m3u.core.foundation.ui.SugarColors
+import com.m3u.data.database.model.Channel
+import com.m3u.data.database.model.DataSource
 import com.m3u.data.database.model.Playlist
+import com.m3u.i18n.R
+import com.m3u.tv.common.PlaylistContentType
+import com.m3u.tv.common.contentType
 import com.m3u.tv.screens.dashboard.rememberChildPadding
 import com.m3u.tv.theme.LexendExa
+import kotlinx.coroutines.launch
 
 @Composable
 fun ForyouScreen(
     navigateToPlaylist: (playlistUrl: String) -> Unit,
     navigateToChannel: (channelId: Int) -> Unit,
+    navigateToChannelDetail: (channelId: Int) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
     isTopBarVisible: Boolean,
     viewModel: ForyouViewModel = hiltViewModel(),
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val playlists: Map<Playlist, Int> by viewModel.playlists.collectAsStateWithLifecycle()
     val specs: List<Recommend.Spec> by viewModel.specs.collectAsStateWithLifecycle()
     Box(Modifier.fillMaxSize()) {
@@ -55,7 +66,16 @@ fun ForyouScreen(
             specs = specs,
             onScroll = onScroll,
             navigateToPlaylist = navigateToPlaylist,
-            navigateToChannel = navigateToChannel,
+            onSpecChannelClick = { channel ->
+                coroutineScope.launch {
+                    val playlist = viewModel.getPlaylist(channel.playlistUrl)
+                    if (playlist == null || playlist.contentType().opensDetails) {
+                        navigateToChannelDetail(channel.id)
+                    } else {
+                        navigateToChannel(channel.id)
+                    }
+                }
+            },
             isTopBarVisible = isTopBarVisible,
             modifier = Modifier.fillMaxSize()
         )
@@ -68,7 +88,7 @@ private fun Catalog(
     specs: List<Recommend.Spec>,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
     navigateToPlaylist: (playlistUrl: String) -> Unit,
-    navigateToChannel: (channelId: Int) -> Unit,
+    onSpecChannelClick: (channel: Channel) -> Unit,
     modifier: Modifier = Modifier,
     isTopBarVisible: Boolean = true,
 ) {
@@ -102,13 +122,11 @@ private fun Catalog(
                     padding = childPadding,
                     onClickSpec = { spec ->
                         when (spec) {
-                            is Recommend.UnseenSpec -> {
-                                navigateToChannel(spec.channel.id)
-                            }
+                            is Recommend.UnseenSpec -> onSpecChannelClick(spec.channel)
 
                             is Recommend.DiscoverSpec -> TODO()
                             is Recommend.NewRelease -> TODO()
-                            is Recommend.CwSpec -> TODO()
+                            is Recommend.CwSpec -> onSpecChannelClick(spec.channel)
                         }
                     },
                     modifier = Modifier
@@ -122,65 +140,110 @@ private fun Catalog(
             }
         }
 
-        item(contentType = "PlaylistsRow") {
-            val startPadding: Dp = rememberChildPadding().start
-            val endPadding: Dp = rememberChildPadding().end
-            val shape = AbsoluteSmoothCornerShape(16.dp, 100)
-            LazyRow(
-                modifier = Modifier
-                    .focusGroup()
-                    .padding(top = 16.dp),
-                contentPadding = PaddingValues(start = startPadding, end = endPadding)
-            ) {
-                val entries = playlists.entries.toList()
-                items(entries.size) {
-                    val (playlist, _) = entries[it]
-                    val (color, contentColor) = remember {
-                        SugarColors.entries.random()
-                    }
-                    CompactCard(
-                        onClick = { navigateToPlaylist(playlist.url) },
-                        title = {
-                            Text(
-                                text = playlist.title,
-                                modifier = Modifier.padding(16.dp),
-                                fontSize = 36.sp,
-                                lineHeight = 36.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = LexendExa
-                            )
-                        },
-                        colors = CardDefaults.compactCardColors(
-                            containerColor = color,
-                            contentColor = MaterialTheme.colorScheme.background
-                        ),
-                        shape = CardDefaults.shape(shape),
-                        border = CardDefaults.border(
-                            border = Border(
-                                BorderStroke(
-                                    width = 2.dp,
-                                    color = MaterialTheme.colorScheme.border
-                                ),
-                                shape = shape
-                            ),
-                            focusedBorder = Border(
-                                BorderStroke(width = 4.dp, color = Color.White),
-                                shape = shape
-                            ),
-                            pressedBorder = Border(
-                                BorderStroke(
-                                    width = 4.dp,
-                                    color = MaterialTheme.colorScheme.border
-                                ),
-                                shape = shape
-                            )
-                        ),
-                        image = {},
-                        modifier = Modifier
-                            .width(265.dp)
-                            .heightIn(min = 130.dp)
+        val allEntries = playlists.entries
+            .filter { (playlist, count) ->
+                count > 0 && playlist.source != DataSource.EPG
+            }
+            .sortedBy { (playlist, _) -> playlist.title.lowercase() }
+        PlaylistContentType.entries.forEach { contentType ->
+            val entries = allEntries.filter { (playlist, _) ->
+                playlist.contentType() == contentType
+            }
+            if (entries.isNotEmpty()) {
+                item(contentType = "PlaylistsRow-${contentType.name}") {
+                    PlaylistSectionRow(
+                        contentType = contentType,
+                        entries = entries,
+                        navigateToPlaylist = navigateToPlaylist,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistSectionRow(
+    contentType: PlaylistContentType,
+    entries: List<Map.Entry<Playlist, Int>>,
+    navigateToPlaylist: (playlistUrl: String) -> Unit,
+) {
+    val startPadding: Dp = rememberChildPadding().start
+    val endPadding: Dp = rememberChildPadding().end
+    val shape = AbsoluteSmoothCornerShape(16.dp, 100)
+    Column(
+        modifier = Modifier.padding(top = 16.dp)
+    ) {
+        Text(
+            text = stringResource(contentType.sectionTitleResId),
+            style = MaterialTheme.typography.headlineLarge.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 30.sp
+            ),
+            modifier = Modifier
+                .padding(start = startPadding, end = endPadding)
+                .padding(bottom = 16.dp)
+        )
+        LazyRow(
+            modifier = Modifier.focusGroup(),
+            contentPadding = PaddingValues(start = startPadding, end = endPadding)
+        ) {
+            items(entries.size) { index ->
+                val (playlist, count) = entries[index]
+                val (color, _) = remember {
+                    SugarColors.entries.random()
+                }
+                CompactCard(
+                    onClick = { navigateToPlaylist(playlist.url) },
+                    title = {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = playlist.title,
+                                fontSize = 32.sp,
+                                lineHeight = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = LexendExa,
+                                maxLines = 2
+                            )
+                            Text(
+                                text = stringResource(R.string.ui_playlist_item_count, count),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(top = 12.dp)
+                            )
+                        }
+                    },
+                    colors = CardDefaults.compactCardColors(
+                        containerColor = color,
+                        contentColor = MaterialTheme.colorScheme.background
+                    ),
+                    shape = CardDefaults.shape(shape),
+                    border = CardDefaults.border(
+                        border = Border(
+                            BorderStroke(
+                                width = 2.dp,
+                                color = MaterialTheme.colorScheme.border
+                            ),
+                            shape = shape
+                        ),
+                        focusedBorder = Border(
+                            BorderStroke(width = 4.dp, color = Color.White),
+                            shape = shape
+                        ),
+                        pressedBorder = Border(
+                            BorderStroke(
+                                width = 4.dp,
+                                color = MaterialTheme.colorScheme.border
+                            ),
+                            shape = shape
+                        )
+                    ),
+                    image = {},
+                    modifier = Modifier
+                        .width(320.dp)
+                        .heightIn(min = 156.dp)
+                )
             }
         }
     }

@@ -534,12 +534,16 @@ internal class PlaylistRepositoryImpl @Inject constructor(
             .map { it.toMap() }
             .catch { emit(emptyMap()) }
 
-    override suspend fun readEpisodesOrThrow(series: Channel): List<XtreamChannelInfo.Episode> {
+    override suspend fun readSeriesInfoOrThrow(series: Channel): XtreamChannelInfo {
         val playlist = checkNotNull(get(series.playlistUrl)) { "playlist is not exist" }
-        val seriesInfo = xtreamParser.getSeriesInfoOrThrow(
+        return xtreamParser.getSeriesInfoOrThrow(
             input = XtreamInput.decodeFromPlaylistUrl(playlist.url),
             seriesId = Url(series.url).rawSegments.last().toInt()
         )
+    }
+
+    override suspend fun readEpisodesOrThrow(series: Channel): List<XtreamChannelInfo.Episode> {
+        val seriesInfo = readSeriesInfoOrThrow(series)
         // fixme: do not flatmap
         return seriesInfo.episodes.flatMap { it.value }
     }

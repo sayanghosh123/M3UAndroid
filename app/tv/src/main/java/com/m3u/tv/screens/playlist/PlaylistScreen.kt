@@ -14,14 +14,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.PagingData
 import com.m3u.business.playlist.PlaylistViewModel
 import com.m3u.data.database.model.Channel
+import com.m3u.tv.common.contentType
 import com.m3u.tv.screens.dashboard.rememberChildPadding
 import kotlinx.coroutines.flow.Flow
 
 @Composable
 fun PlaylistScreen(
-    onChannelClick: (channel: Channel) -> Unit,
+    onPlayChannel: (channel: Channel) -> Unit,
+    onOpenChannelDetails: (channel: Channel) -> Unit,
     viewModel: PlaylistViewModel = hiltViewModel(),
 ) {
+    val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val channels: Map<String, Flow<PagingData<Channel>>> by viewModel.channels.collectAsStateWithLifecycle()
     val pinnedCategories by viewModel.pinnedCategories.collectAsStateWithLifecycle()
     Catalog(
@@ -29,7 +32,13 @@ fun PlaylistScreen(
         pinnedCategories = pinnedCategories,
         onPinOrUnpinCategory = viewModel::onPinOrUnpinCategory,
         onHideCategory = viewModel::onHideCategory,
-        onChannelClick = onChannelClick,
+        onChannelClick = { channel ->
+            if (playlist == null || playlist.contentType().opensDetails) {
+                onOpenChannelDetails(channel)
+            } else {
+                onPlayChannel(channel)
+            }
+        },
         reloadThumbnail = viewModel::reloadThumbnail,
         syncThumbnail = viewModel::syncThumbnail,
         modifier = Modifier.fillMaxSize(),

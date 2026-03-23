@@ -8,8 +8,8 @@ import kotlinx.serialization.Serializable
 data class XtreamChannelInfo(
     @SerialName("episodes")
     val episodes: Map<String, List<Episode>> = emptyMap(),
-//    @SerialName("info")
-//    val info: Info?,
+    @SerialName("info")
+    val info: Info? = null,
 //    @SerialName("seasons")
 //    val seasons: List<String?> = emptyList()
 ) {

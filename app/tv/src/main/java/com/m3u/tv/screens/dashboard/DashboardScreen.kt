@@ -201,6 +201,7 @@ private fun Body(
             ForyouScreen(
                 navigateToPlaylist = navigateToPlaylist,
                 navigateToChannel = navigateToChannel,
+                navigateToChannelDetail = navigateToChannelDetail,
                 onScroll = updateTopBarVisibility,
                 isTopBarVisible = isTopBarVisible
             )

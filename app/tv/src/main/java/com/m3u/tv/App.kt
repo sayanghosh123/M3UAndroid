@@ -78,7 +78,8 @@ fun App(
                 enterTransition = { fadeIn() }
             ) {
                 PlaylistScreen(
-                    onChannelClick = { channel -> navigateToChannel(channel.id) }
+                    onPlayChannel = { channel -> navigateToChannel(channel.id) },
+                    onOpenChannelDetails = { channel -> navigateToChannelDetail(channel.id) }
                 )
             }
             composable(

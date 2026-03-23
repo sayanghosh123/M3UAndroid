@@ -58,6 +58,8 @@ interface PlaylistRepository {
 
     fun observeAllCounts(): Flow<Map<Playlist, Int>>
 
+    suspend fun readSeriesInfoOrThrow(series: Channel): XtreamChannelInfo
+
     suspend fun readEpisodesOrThrow(series: Channel): List<XtreamChannelInfo.Episode>
 
     suspend fun deleteEpgPlaylistAndProgrammes(epgUrl: String)

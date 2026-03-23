@@ -43,6 +43,134 @@
 
 **Nightly Builds**: [Pre-release Packages](https://nightly.link/oxyroid/M3UAndroid/workflows/android/master/artifact.zip)
 
+## 📺 TV setup from this repo (beginner guide)
+
+If you have never installed an app on a TV before, start here. This repository now includes a guided Windows installer flow for the TV build:
+
+- `scripts\install-tv.cmd` - double-clickable wrapper for Windows users
+- `scripts\install-tv.ps1` - full PowerShell installer with `-Build`, `-Launch`, `-UninstallFirst`, and `-DryRun`
+
+### What you need
+
+- A Windows PC on the same network as your TV
+- An Android TV / Google TV device
+- Developer options enabled on the TV
+- One playlist source to test with:
+  - M3U title + URL
+  - Xtream title + basic server URL + username + password
+  - Optional EPG URL if you want guide data
+
+### Step 1: turn on developer options and debugging on the TV
+
+1. Open `Settings` on the TV.
+2. On Google TV, go to `System` -> `About` -> `Android TV OS build`.
+3. On classic Android TV, go to `Device Preferences` -> `About` -> `Build`.
+4. Click that build entry several times until developer options are enabled.
+5. Open `Developer options` (`Settings` -> `System` -> `Developer options` on Google TV).
+6. Turn on `Network debugging` or `USB debugging`.
+7. Find the TV IP address from the network settings screen.
+
+If the TV shows a trust or RSA prompt later, choose `Allow`.
+
+### Step 2: install with the one-click script
+
+The easiest first-time path is to double-click:
+
+```text
+scripts\install-tv.cmd
+```
+
+The script will guide you, ask for the TV IP if needed, connect with ADB, install the APK, and optionally launch the app.
+If the TV APK does not exist yet, the PowerShell installer builds it automatically.
+
+If you prefer to run it from a terminal, use:
+
+```powershell
+.\scripts\install-tv.cmd -TvIp 192.168.1.50 -Build -Launch
+```
+
+Use a preview first if you want to see exactly what will happen without changing anything:
+
+```powershell
+.\scripts\install-tv.cmd -TvIp 192.168.1.50 -Build -Launch -DryRun
+```
+
+Useful options:
+
+- `-Build` builds `:app:tv:assembleDebug` before installing
+- `-Launch` opens the TV app after install
+- `-UninstallFirst` removes the old app before reinstalling
+- `-DryRun` prints the commands without executing them
+- `-SkipConnect` skips `adb connect` and uses an already-connected device
+
+### Step 3: manual install if you want full control
+
+If you want to do everything manually, the generated TV APK lives at:
+
+```text
+app\tv\build\outputs\apk\debug\tv-<version>.apk
+```
+
+Example commands on Windows:
+
+```powershell
+$adb = 'C:\Program Files (x86)\Android\android-sdk\platform-tools\adb.exe'
+& $adb connect 192.168.1.50:5555
+$apk = Get-ChildItem '.\app\tv\build\outputs\apk\debug\tv-*.apk' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+& $adb install -r $apk.FullName
+```
+
+### Step 4: first run inside the app
+
+After install, open `M3UAndroid`, move to the user icon in the top-right corner, and choose:
+
+```text
+Subscribe
+```
+
+Then choose one of the supported source types:
+
+- `M3U`
+  - Enter a title
+  - Enter the playlist URL
+- `EPG`
+  - Enter a title
+  - Enter the EPG URL
+- `Xtream`
+  - Enter a title
+  - Enter the `Basic URL` in the form `http://server:port`
+  - Enter username
+  - Enter password
+
+For Xtream, use the server root URL, not a full `player_api.php` or `get.php` URL.
+
+### Step 5: what to expect after import
+
+Once your data is imported:
+
+- `Live TV` items play directly
+- `Movies` open their detail page before playback
+- `Series` open a detail page with metadata and episode buttons
+
+The TV slice added in this repo specifically improves Xtream `Movies` and `Series` browsing and episode playback.
+
+### Troubleshooting
+
+- If `adb` is not found, set `ANDROID_HOME` or install Android platform-tools.
+- If `adb install` says `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, uninstall first and retry:
+
+```powershell
+.\scripts\install-tv.cmd -TvIp 192.168.1.50 -UninstallFirst -Launch
+```
+
+- If the TV does not appear to connect, confirm:
+  - the PC and TV are on the same network
+  - debugging is enabled on the TV
+  - you accepted the trust prompt on the TV
+- If the installer mentions authorization or the device stays unavailable, look at the TV screen and accept the debugging prompt before retrying.
+- If network debugging is unavailable on your TV, use USB debugging or sideload the APK with a USB drive and a file manager.
+- If you only want to preview what the installer will do, run with `-DryRun` first.
+
 ## 🛠 Tech Stack
 
 - 100% Kotlin-first approach

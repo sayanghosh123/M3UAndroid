@@ -9,6 +9,10 @@
     <string name="ui_destination_extension">Extension</string>
     <string name="ui_destination_setting">Settings</string>
     <string name="ui_destination_playlist">Playlist</string>
+    <string name="ui_playlist_section_live">Live TV</string>
+    <string name="ui_playlist_section_vod">Movies</string>
+    <string name="ui_playlist_section_series">Series</string>
+    <string name="ui_playlist_item_count">%1$d items</string>
 
     <string name="ui_error_unknown">unknown error</string>
     <string name="ui_cd_top_bar_on_back_pressed">back</string>
@@ -25,4 +29,18 @@
     <string name="ui_sort_unspecified">Unspecified</string>
 
     <string name="ui_connect">Connect</string>
+    <string name="ui_content_type_live">Live</string>
+    <string name="ui_content_type_vod">Movie</string>
+    <string name="ui_content_type_series">Series</string>
+    <string name="ui_action_play_live">Play live</string>
+    <string name="ui_action_play_vod">Play movie</string>
+    <string name="ui_action_play_series">Play first episode</string>
+    <string name="ui_label_type">Type</string>
+    <string name="ui_label_playlist">Playlist</string>
+    <string name="ui_label_category">Category</string>
+    <string name="ui_label_genre">Genre</string>
+    <string name="ui_label_rating">Rating</string>
+    <string name="ui_label_release_date">Release date</string>
+    <string name="ui_label_episodes">Episodes</string>
+    <string name="ui_label_episode_number">Episode %1$s</string>
 </resources>

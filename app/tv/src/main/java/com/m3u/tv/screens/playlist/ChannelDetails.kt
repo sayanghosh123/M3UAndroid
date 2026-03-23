@@ -1,6 +1,7 @@
 package com.m3u.tv.screens.playlist
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,7 +50,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChannelDetail(
     channel: Channel,
-    navigateToChannel: () -> Unit,
+    contentTypeLabel: String,
+    summary: String,
+    primaryActionLabel: String,
+    primaryActionEnabled: Boolean,
+    onPrimaryAction: () -> Unit,
     updateFavorite: () -> Unit,
 ) {
     val childPadding = rememberChildPadding()
@@ -67,21 +72,22 @@ fun ChannelDetail(
             modifier = Modifier.fillMaxSize()
         )
 
-        Column(modifier = Modifier.fillMaxWidth(0.55f)) {
+        Column(modifier = Modifier.fillMaxWidth(0.58f)) {
             Spacer(modifier = Modifier.height(108.dp))
             Column(
                 modifier = Modifier.padding(start = childPadding.start)
             ) {
+                ContentTypeLabel(text = contentTypeLabel)
                 ChannelLargeTitle(channelTitle = channel.title)
 
-                Column(
-                    modifier = Modifier.alpha(0.75f)
-                ) {
-                    ChannelDescription(description = channel.category)
+                if (summary.isNotBlank()) {
+                    ChannelDescription(description = summary)
                 }
-                WatchTrailerButton(
+                PrimaryActionsRow(
                     channel = channel,
-                    navigateToChannel = navigateToChannel,
+                    primaryActionLabel = primaryActionLabel,
+                    primaryActionEnabled = primaryActionEnabled,
+                    onPrimaryAction = onPrimaryAction,
                     updateFavorite = updateFavorite,
                     modifier = Modifier.onFocusChanged {
                         if (it.isFocused) {
@@ -95,18 +101,21 @@ fun ChannelDetail(
 }
 
 @Composable
-private fun WatchTrailerButton(
+private fun PrimaryActionsRow(
     channel: Channel,
-    modifier: Modifier = Modifier,
-    navigateToChannel: () -> Unit,
+    primaryActionLabel: String,
+    primaryActionEnabled: Boolean,
+    onPrimaryAction: () -> Unit,
     updateFavorite: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.padding(top = 24.dp),
     ) {
         Button(
-            onClick = navigateToChannel,
+            onClick = onPrimaryAction,
+            enabled = primaryActionEnabled,
             contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
             shape = ButtonDefaults.shape(shape = JetStreamButtonShape)
         ) {
@@ -116,7 +125,7 @@ private fun WatchTrailerButton(
             )
             Spacer(Modifier.size(16.dp))
             Text(
-                text = "Play Now",
+                text = primaryActionLabel,
                 style = MaterialTheme.typography.titleSmall
             )
         }
@@ -137,38 +146,25 @@ private fun WatchTrailerButton(
             )
         }
     }
-
 }
 
 @Composable
-private fun DirectorScreenplayMusicRow(
-    director: String,
-    screenplay: String,
-    music: String
+private fun ContentTypeLabel(
+    text: String,
 ) {
-    Row(modifier = Modifier.padding(top = 32.dp)) {
-        TitleValueText(
-            modifier = Modifier
-                .padding(end = 32.dp)
-                .weight(1f),
-            title = "stringResource(R.string.director)",
-            value = director
-        )
-
-        TitleValueText(
-            modifier = Modifier
-                .padding(end = 32.dp)
-                .weight(1f),
-            title = "stringResource(R.string.screenplay)",
-            value = screenplay
-        )
-
-        TitleValueText(
-            modifier = Modifier.weight(1f),
-            title = "stringResource(R.string.music)",
-            value = music
-        )
-    }
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelLarge.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.2.sp
+        ),
+        modifier = Modifier
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                shape = JetStreamButtonShape
+            )
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    )
 }
 
 @Composable
@@ -179,8 +175,8 @@ private fun ChannelDescription(description: String) {
             fontSize = 15.sp,
             fontWeight = FontWeight.Normal
         ),
-        modifier = Modifier.padding(top = 8.dp),
-        maxLines = 2
+        modifier = Modifier.padding(top = 16.dp),
+        maxLines = 4
     )
 }
 
@@ -191,7 +187,8 @@ private fun ChannelLargeTitle(channelTitle: String) {
         style = MaterialTheme.typography.displayMedium.copy(
             fontWeight = FontWeight.Bold
         ),
-        maxLines = 1
+        modifier = Modifier.padding(top = 16.dp),
+        maxLines = 2
     )
 }
 

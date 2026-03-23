@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.TestExtension
 import com.android.build.gradle.LibraryExtension
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeCompilerGradlePluginExtension
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
@@ -53,6 +55,7 @@ subprojects {
     }
     plugins.withId("com.android.library") {
         configure<LibraryExtension> {
+            buildToolsVersion = "36.0.0"
             compileSdk = 36
             defaultConfig {
                 minSdk = 26
@@ -72,6 +75,16 @@ subprojects {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17
             }
+        }
+    }
+    plugins.withId("com.android.application") {
+        configure<ApplicationExtension> {
+            buildToolsVersion = "36.0.0"
+        }
+    }
+    plugins.withId("com.android.test") {
+        configure<TestExtension> {
+            buildToolsVersion = "36.0.0"
         }
     }
 }
