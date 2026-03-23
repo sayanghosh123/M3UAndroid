@@ -20,6 +20,7 @@ internal fun PreferencesFragment(
     navigateToPlaylistManagement: () -> Unit,
     navigateToThemeSelector: () -> Unit,
     navigateToOptional: () -> Unit,
+    navigateToLogging: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalSpacing.current
@@ -34,7 +35,8 @@ internal fun PreferencesFragment(
                 fragment = fragment,
                 navigateToPlaylistManagement = navigateToPlaylistManagement,
                 navigateToThemeSelector = navigateToThemeSelector,
-                navigateToOptional = navigateToOptional
+                navigateToOptional = navigateToOptional,
+                navigateToLogging = navigateToLogging
             )
         }
         item {

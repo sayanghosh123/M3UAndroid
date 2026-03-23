@@ -63,4 +63,28 @@ sealed class SettingMessage(
         type = TYPE_SNACK,
         resId = string.feat_setting_restoring
     )
+
+    data object LogEmailMissing : SettingMessage(
+        level = LEVEL_ERROR,
+        type = TYPE_SNACK,
+        resId = string.feat_setting_logging_error_missing_email
+    )
+
+    data object NoLogsAvailable : SettingMessage(
+        level = LEVEL_ERROR,
+        type = TYPE_SNACK,
+        resId = string.feat_setting_logging_error_no_logs
+    )
+
+    data object LogsCleared : SettingMessage(
+        level = LEVEL_INFO,
+        type = TYPE_SNACK,
+        resId = string.feat_setting_logging_cleared
+    )
+
+    data object NoEmailAppAvailable : SettingMessage(
+        level = LEVEL_ERROR,
+        type = TYPE_SNACK,
+        resId = string.feat_setting_logging_error_no_email_app
+    )
 }

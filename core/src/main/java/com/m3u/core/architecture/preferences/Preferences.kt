@@ -18,6 +18,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
@@ -102,6 +103,8 @@ private val PREFERENCES: Map<Preferences.Key<*>, *> = listOf(
     PreferencesKeys.PLAYLIST_STRATEGY to PlaylistStrategy.ALL,
     PreferencesKeys.ROW_COUNT to 1,
     PreferencesKeys.CONNECT_TIMEOUT to ConnectTimeout.SHORT,
+    PreferencesKeys.LOG_LEVEL to LogLevel.ERROR,
+    PreferencesKeys.LOG_EMAIL to "",
     PreferencesKeys.GOD_MODE to false,
     PreferencesKeys.CLIP_MODE to ClipMode.ADAPTIVE,
     PreferencesKeys.AUTO_REFRESH_CHANNELS to false,
@@ -148,6 +151,8 @@ object PreferencesKeys {
     val ROW_COUNT = intPreferencesKey("rowCount")
 
     val CONNECT_TIMEOUT = longPreferencesKey("connect-timeout")
+    val LOG_LEVEL = intPreferencesKey("log-level")
+    val LOG_EMAIL = stringPreferencesKey("log-email")
     val GOD_MODE = booleanPreferencesKey("god-mode")
 
     val CLIP_MODE = intPreferencesKey("clip-mode")

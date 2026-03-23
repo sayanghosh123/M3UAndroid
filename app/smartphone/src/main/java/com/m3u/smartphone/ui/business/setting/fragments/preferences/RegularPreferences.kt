@@ -3,6 +3,7 @@ package com.m3u.smartphone.ui.business.setting.fragments.preferences
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.MusicNote
@@ -21,6 +22,7 @@ internal fun RegularPreferences(
     navigateToPlaylistManagement: () -> Unit,
     navigateToThemeSelector: () -> Unit,
     navigateToOptional: () -> Unit,
+    navigateToLogging: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalSpacing.current
@@ -45,6 +47,12 @@ internal fun RegularPreferences(
             icon = Icons.Rounded.Extension,
             enabled = fragment != SettingDestination.Optional,
             onClick = navigateToOptional
+        )
+        Preference(
+            title = stringResource(string.feat_setting_logging).title(),
+            icon = Icons.Rounded.BugReport,
+            enabled = fragment != SettingDestination.Logging,
+            onClick = navigateToLogging
         )
     }
 }

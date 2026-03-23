@@ -324,6 +324,27 @@ So this is a solid first-pass sender implementation, but it is **not yet a full 
 - If a provider requires a custom user-agent, the app warns you because Chromecast playback may fail.
 - If you need the most reliable TV playback for difficult IPTV providers, use **Path A** on a Google TV / Android TV device instead of remote casting from the phone.
 
+#### Collecting phone logs when something fails
+
+If Chromecast or phone playback does not work, the easiest place to check logs is **inside the smartphone app**:
+
+1. Open the **smartphone** app.
+2. Open **Settings**.
+3. Open **Logging**.
+
+That screen now lets you:
+
+- keep a rolling log on the device
+- choose the minimum log level
+- save the recipient email address you want to use for support/debugging
+- open a prefilled email draft with the current logs attached as a ZIP file
+
+By default, the log level is **errors only**.
+If you need more detail, raise it to **Info**, **Debug**, or **Verbose**, reproduce the issue once, then use **Send logs**.
+
+The logs are kept in the app's private/app-specific storage and rotate automatically.
+In normal use, you do **not** need to browse Android folders manually; the in-app **Logging** screen is the intended way to review the saved log count and share the bundle.
+
 ## 🛠 Tech Stack
 
 - 100% Kotlin-first approach

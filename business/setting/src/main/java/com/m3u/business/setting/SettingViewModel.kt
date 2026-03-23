@@ -24,6 +24,8 @@ import com.m3u.data.database.model.Playlist
 import com.m3u.data.parser.xtream.XtreamInput
 import com.m3u.data.repository.channel.ChannelRepository
 import com.m3u.data.repository.playlist.PlaylistRepository
+import com.m3u.data.service.AppLogSnapshot
+import com.m3u.data.service.AppLogger
 import com.m3u.data.service.Messager
 import com.m3u.data.worker.BackupWorker
 import com.m3u.data.worker.RestoreWorker
@@ -49,10 +51,13 @@ class SettingViewModel @Inject constructor(
     private val workManager: WorkManager,
     private val settings: Settings,
     private val messager: Messager,
+    private val appLogger: AppLogger,
     publisher: Publisher,
     // FIXME: do not use dao in viewmodel
     private val colorSchemeDao: ColorSchemeDao,
 ) : ViewModel() {
+    val logSnapshot: StateFlow<AppLogSnapshot> = appLogger.snapshot
+
     val epgs: StateFlow<List<Playlist>> = playlistRepository
         .observeAllEpgs()
         .stateIn(
@@ -315,6 +320,54 @@ class SettingViewModel @Inject constructor(
 
     val versionName: String = publisher.versionName
     val versionCode: Int = publisher.versionCode
+    private val model: String = publisher.model
 
     val properties = SettingProperties()
+
+    suspend fun prepareLogEmail(recipient: String): LogEmailDraft? {
+        val trimmed = recipient.trim()
+        if (trimmed.isBlank()) {
+            messager.emit(SettingMessage.LogEmailMissing)
+            return null
+        }
+
+        val attachmentUri = appLogger.createEmailAttachment()
+        if (attachmentUri == null) {
+            messager.emit(SettingMessage.NoLogsAvailable)
+            return null
+        }
+
+        return LogEmailDraft(
+            recipient = trimmed,
+            subject = "M3UAndroid logs $versionName ($versionCode)",
+            body = buildString {
+                appendLine("Attached are the current M3UAndroid logs.")
+                appendLine("Device model: $model")
+                appendLine()
+                appendLine("Please add:")
+                appendLine("- what you were doing")
+                appendLine("- what you expected")
+                appendLine("- what happened instead")
+            },
+            attachmentUri = attachmentUri
+        )
+    }
+
+    fun clearLogs() {
+        viewModelScope.launch {
+            appLogger.clearLogs()
+            messager.emit(SettingMessage.LogsCleared)
+        }
+    }
+
+    fun onLogEmailAppUnavailable() {
+        messager.emit(SettingMessage.NoEmailAppAvailable)
+    }
 }
+
+data class LogEmailDraft(
+    val recipient: String,
+    val subject: String,
+    val body: String,
+    val attachmentUri: Uri
+)

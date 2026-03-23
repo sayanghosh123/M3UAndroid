@@ -7,6 +7,7 @@ import androidx.work.Configuration
 import com.m3u.core.extension.Utils
 import com.m3u.i18n.R.string
 import com.m3u.smartphone.cast.GoogleCastBootstrap
+import com.m3u.data.service.AppLogger
 import dagger.hilt.android.HiltAndroidApp
 import org.acra.config.mailSender
 import org.acra.config.notification
@@ -21,13 +22,24 @@ class M3UApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var appLogger: AppLogger
+
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) {
             Timber.plant(DebugTree())
         }
+        Timber.plant(appLogger)
         Utils.init(this)
         GoogleCastBootstrap.initialize(this)
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                appLogger.recordException("uncaught-${thread.name}", throwable)
+            }
+            previousHandler?.uncaughtException(thread, throwable)
+        }
     }
 
     override fun attachBaseContext(base: Context?) {

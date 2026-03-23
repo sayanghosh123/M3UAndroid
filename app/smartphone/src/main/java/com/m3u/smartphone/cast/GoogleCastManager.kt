@@ -97,6 +97,7 @@ class GoogleCastManager @Inject constructor() {
         val session = sessionManager?.currentCastSession
         val remoteMediaClient = session?.remoteMediaClient
         if (session == null || remoteMediaClient == null) {
+            Timber.e("Google Cast load requested without an active Cast session")
             onFailure(null)
             return false
         }
@@ -111,7 +112,7 @@ class GoogleCastManager @Inject constructor() {
                 if (result.status.isSuccess) {
                     onSuccess(session.castDevice?.friendlyName)
                 } else {
-                    Timber.w(
+                    Timber.e(
                         "Google Cast load failed with status code %s: %s",
                         result.status.statusCode,
                         result.status.statusMessage

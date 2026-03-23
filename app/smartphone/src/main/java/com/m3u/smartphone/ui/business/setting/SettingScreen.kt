@@ -1,5 +1,7 @@
 package com.m3u.smartphone.ui.business.setting
 
+import android.content.ClipData
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -27,6 +30,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.m3u.business.setting.BackingUpAndRestoringState
+import com.m3u.business.setting.LogEmailDraft
 import com.m3u.business.setting.SettingProperties
 import com.m3u.business.setting.SettingViewModel
 import com.m3u.core.architecture.preferences.PreferencesKeys
@@ -35,9 +39,11 @@ import com.m3u.core.util.basic.title
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.ColorScheme
 import com.m3u.data.database.model.Playlist
+import com.m3u.data.service.AppLogSnapshot
 import com.m3u.i18n.R.string
 import com.m3u.smartphone.ui.business.setting.components.CanvasBottomSheet
 import com.m3u.smartphone.ui.business.setting.fragments.AppearanceFragment
+import com.m3u.smartphone.ui.business.setting.fragments.LoggingFragment
 import com.m3u.smartphone.ui.business.setting.fragments.OptionalFragment
 import com.m3u.smartphone.ui.business.setting.fragments.SubscriptionsFragment
 import com.m3u.smartphone.ui.business.setting.fragments.preferences.PreferencesFragment
@@ -58,12 +64,15 @@ fun SettingRoute(
     viewModel: SettingViewModel = hiltViewModel()
 ) {
     val controller = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     val colorSchemes by viewModel.colorSchemes.collectAsStateWithLifecycle()
     val epgs by viewModel.epgs.collectAsStateWithLifecycle()
     val hiddenChannels by viewModel.hiddenChannels.collectAsStateWithLifecycle()
     val hiddenCategoriesWithPlaylists by viewModel.hiddenCategoriesWithPlaylists.collectAsStateWithLifecycle()
     val backingUpOrRestoring by viewModel.backingUpOrRestoring.collectAsStateWithLifecycle()
+    val logSnapshot by viewModel.logSnapshot.collectAsStateWithLifecycle()
 
     val sheetState = rememberModalBottomSheetState()
     var colorScheme: ColorScheme? by remember { mutableStateOf(null) }
@@ -86,17 +95,44 @@ fun SettingRoute(
     val restore = {
         openDocumentLauncher.launch(arrayOf("text/*"))
     }
+    val sendLogs: (String) -> Unit = { recipient: String ->
+        coroutineScope.launch {
+            val draft: LogEmailDraft = viewModel.prepareLogEmail(recipient) ?: return@launch
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_EMAIL, arrayOf(draft.recipient))
+                putExtra(Intent.EXTRA_SUBJECT, draft.subject)
+                putExtra(Intent.EXTRA_TEXT, draft.body)
+                putExtra(Intent.EXTRA_STREAM, draft.attachmentUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = ClipData.newRawUri(draft.subject, draft.attachmentUri)
+            }
+            runCatching {
+                context.startActivity(
+                    Intent.createChooser(
+                        intent,
+                        context.getString(string.feat_setting_logging_send).title()
+                    )
+                )
+            }.onFailure {
+                viewModel.onLogEmailAppUnavailable()
+            }
+        }
+    }
 
     with(viewModel.properties) {
         SettingScreen(
             versionName = viewModel.versionName,
             versionCode = viewModel.versionCode,
             backingUpOrRestoring = backingUpOrRestoring,
+            logSnapshot = logSnapshot,
             epgs = epgs,
             hiddenChannels = hiddenChannels,
             hiddenCategoriesWithPlaylists = hiddenCategoriesWithPlaylists,
             backup = backup,
             restore = restore,
+            sendLogs = sendLogs,
+            clearLogs = viewModel::clearLogs,
             colorSchemes = colorSchemes,
             openColorScheme = { colorScheme = it },
             restoreSchemes = viewModel::restoreSchemes,
@@ -133,6 +169,7 @@ private fun SettingScreen(
     versionName: String,
     versionCode: Int,
     backingUpOrRestoring: BackingUpAndRestoringState,
+    logSnapshot: AppLogSnapshot,
     onSubscribe: () -> Unit,
     hiddenChannels: List<Channel>,
     hiddenCategoriesWithPlaylists: List<Pair<Playlist, String>>,
@@ -140,6 +177,8 @@ private fun SettingScreen(
     onUnhidePlaylistCategory: (playlistUrl: String, group: String) -> Unit,
     backup: () -> Unit,
     restore: () -> Unit,
+    sendLogs: (String) -> Unit,
+    clearLogs: () -> Unit,
     onClipboard: (String) -> Unit,
     colorSchemes: List<ColorScheme>,
     openColorScheme: (ColorScheme) -> Unit,
@@ -155,6 +194,7 @@ private fun SettingScreen(
     val playlistTitle = stringResource(string.feat_setting_playlist_management)
     val appearanceTitle = stringResource(string.feat_setting_appearance)
     val optionalTitle = stringResource(string.feat_setting_optional_features)
+    val loggingTitle = stringResource(string.feat_setting_logging)
 
     val colorArgb by preferenceOf(PreferencesKeys.COLOR_ARGB)
 
@@ -165,12 +205,13 @@ private fun SettingScreen(
         navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, it)
     }
 
-    LifecycleResumeEffect(destination, defaultTitle, playlistTitle, appearanceTitle) {
+    LifecycleResumeEffect(destination, defaultTitle, playlistTitle, appearanceTitle, optionalTitle, loggingTitle) {
         Metadata.title = when (destination) {
             SettingDestination.Default -> defaultTitle
             SettingDestination.Playlists -> playlistTitle
             SettingDestination.Appearance -> appearanceTitle
             SettingDestination.Optional -> optionalTitle
+            SettingDestination.Logging -> loggingTitle
         }
             .title()
             .let(::AnnotatedString)
@@ -225,6 +266,14 @@ private fun SettingScreen(
                         )
                     }
                 },
+                navigateToLogging = {
+                    coroutineScope.launch {
+                        navigator.navigateTo(
+                            pane = ListDetailPaneScaffoldRole.Detail,
+                            contentKey = SettingDestination.Logging
+                        )
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
         },
@@ -261,6 +310,16 @@ private fun SettingScreen(
 
                 SettingDestination.Optional -> {
                     OptionalFragment(
+                        contentPadding = contentPadding,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                SettingDestination.Logging -> {
+                    LoggingFragment(
+                        logSnapshot = logSnapshot,
+                        sendLogs = sendLogs,
+                        clearLogs = clearLogs,
                         contentPadding = contentPadding,
                         modifier = Modifier.fillMaxSize()
                     )
