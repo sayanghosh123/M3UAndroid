@@ -38,4 +38,9 @@ interface ChannelRepository {
     fun pagingAllFavorite(sort: Sort): PagingSource<Int, Channel>
     fun observeAllHidden(): Flow<List<Channel>>
     fun search(query: String): PagingSource<Int, Channel>
+    fun searchByPlaylist(
+        playlistUrl: String,
+        query: String,
+        hiddenCategories: List<String> = emptyList()
+    ): PagingSource<Int, Channel>
 }

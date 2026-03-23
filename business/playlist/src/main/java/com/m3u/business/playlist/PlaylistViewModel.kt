@@ -15,7 +15,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
-import androidx.paging.cachedIn
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkQuery
@@ -68,7 +67,10 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+
+private const val GLOBAL_SEARCH_KEY = "__global_search__"
 
 @HiltViewModel
 class PlaylistViewModel @Inject constructor(
@@ -161,7 +163,7 @@ class PlaylistViewModel @Inject constructor(
                     when (resource) {
                         Resource.Loading -> {}
                         is Resource.Success -> {
-                            messager.emit(ChannelCoverSaved(resource.data.absolutePath))
+                            messager.emit(ChannelCoverSaved(resource.data.displayPath))
                         }
 
                         is Resource.Failure -> {
@@ -230,11 +232,33 @@ class PlaylistViewModel @Inject constructor(
     }
 
     val query = MutableStateFlow("")
+    @OptIn(FlowPreview::class)
+    private val effectiveQuery: StateFlow<String> = query
+        .map { it.trim() }
+        .let { flow ->
+            merge(
+                flow.take(1),
+                flow.drop(1).debounce(300.milliseconds)
+            )
+        }
+        .stateIn(
+            scope = viewModelScope,
+            initialValue = "",
+            started = SharingStarted.Lazily
+        )
+    val isQueryActive: StateFlow<Boolean> = effectiveQuery
+        .map { it.isNotEmpty() }
+        .stateIn(
+            scope = viewModelScope,
+            initialValue = false,
+            started = SharingStarted.Lazily
+        )
     val scrollUp: MutableStateFlow<Event<Unit>> = MutableStateFlow(handledEvent())
 
     @Immutable
     data class ChannelParameters(
         val playlistUrl: String,
+        val hiddenCategories: List<String>,
         val query: String,
         val sort: Sort,
         val categories: List<String>,
@@ -242,16 +266,13 @@ class PlaylistViewModel @Inject constructor(
 
     @OptIn(FlowPreview::class)
     private val categories: StateFlow<List<String>> =
-        flatmapCombined(playlistUrl, query, sort) { playlistUrl, query, sort ->
-            if (sort == Sort.MIXED) flowOf(emptyList())
-            else playlistRepository.observeCategoriesByPlaylistUrlIgnoreHidden(playlistUrl, query)
-        }
-            .let { flow ->
-                merge(
-                    flow.take(1),
-                    flow.drop(1).debounce(1.seconds)
-                )
+        flatmapCombined(playlistUrl, effectiveQuery, sort) { playlistUrl, query, sort ->
+            when {
+                query.isNotEmpty() -> flowOf(listOf(GLOBAL_SEARCH_KEY))
+                sort == Sort.MIXED -> flowOf(emptyList())
+                else -> playlistRepository.observeCategoriesByPlaylistUrlIgnoreHidden(playlistUrl, query)
             }
+        }
             .stateIn(
                 scope = viewModelScope,
                 initialValue = emptyList(),
@@ -260,32 +281,49 @@ class PlaylistViewModel @Inject constructor(
 
     val channels: StateFlow<Map<String, Flow<PagingData<Channel>>>> = combine(
         playlistUrl,
+        playlist,
         categories,
-        query, sort
-    ) { playlistUrl, categories, query, sort ->
+        effectiveQuery,
+        sort
+    ) { playlistUrl, playlist, categories, query, sort ->
         ChannelParameters(
             playlistUrl = playlistUrl,
+            hiddenCategories = playlist?.hiddenCategories.orEmpty(),
             query = query,
             sort = sort,
             categories = categories
         )
     }
-        .mapLatest { (playlistUrl, query, sort, categories) ->
-            if (sort == Sort.MIXED) {
-                mapOf(
-                    "" to Pager(PagingConfig(15)) {
-                        channelRepository.pagingAllByPlaylistUrl(
-                            playlistUrl,
-                            "",
-                            query,
-                            sort
-                        )
-                    }
-                        .flow
-                        .cachedIn(viewModelScope)
-                )
-            } else {
-                categories.associate { category ->
+        .mapLatest { (playlistUrl, hiddenCategories, query, sort, categories) ->
+            when {
+                query.isNotEmpty() -> {
+                    mapOf(
+                        GLOBAL_SEARCH_KEY to Pager(PagingConfig(15)) {
+                            channelRepository.searchByPlaylist(
+                                playlistUrl = playlistUrl,
+                                query = query,
+                                hiddenCategories = hiddenCategories
+                            )
+                        }
+                            .flow
+                    )
+                }
+
+                sort == Sort.MIXED -> {
+                    mapOf(
+                        "" to Pager(PagingConfig(15)) {
+                            channelRepository.pagingAllByPlaylistUrl(
+                                playlistUrl,
+                                "",
+                                query,
+                                sort
+                            )
+                        }
+                            .flow
+                    )
+                }
+
+                else -> categories.associate { category ->
                     category to Pager(PagingConfig(15)) {
                         channelRepository.pagingAllByPlaylistUrl(
                             playlistUrl,
@@ -295,7 +333,6 @@ class PlaylistViewModel @Inject constructor(
                         )
                     }
                         .flow
-                        .cachedIn(viewModelScope)
                 }
             }
         }

@@ -13,11 +13,7 @@ inline fun PermissionState.checkPermissionOrRationale(
     val sdk = Build.VERSION.SDK_INT
     val skip = when (permission) {
         Manifest.permission.POST_NOTIFICATIONS -> sdk < Build.VERSION_CODES.TIRAMISU
-
-        // If you try to check or request the WRITE_EXTERNAL_STORAGE on Android 13+,
-        // it will always return false.
-        // So you'll have to skip the permission check/request completely on Android 13+.
-        Manifest.permission.WRITE_EXTERNAL_STORAGE -> sdk >= Build.VERSION_CODES.TIRAMISU
+        Manifest.permission.WRITE_EXTERNAL_STORAGE -> sdk >= Build.VERSION_CODES.Q
         else -> false
     }
     when {

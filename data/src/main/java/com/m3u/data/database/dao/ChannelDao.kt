@@ -243,12 +243,50 @@ interface ChannelDao {
 
     @Query(
         """
-            SELECT * FROM streams WHERE 1
-            AND title LIKE '%'||:query||'%'
+            SELECT * FROM streams
+            WHERE hidden = 0
+            AND LOWER(title) LIKE '%' || LOWER(:escapedQuery) || '%' ESCAPE '\'
+            ORDER BY
+                CASE
+                    WHEN LOWER(title) = LOWER(:rawQuery) THEN 0
+                    WHEN LOWER(title) LIKE LOWER(:escapedQuery) || '%' ESCAPE '\' THEN 1
+                    WHEN LOWER(title) LIKE '% ' || LOWER(:escapedQuery) || '%' ESCAPE '\' THEN 2
+                    ELSE 3
+                END,
+                favourite DESC,
+                seen DESC,
+                title COLLATE NOCASE ASC
         """
     )
     fun query(
-        query: String
+        rawQuery: String,
+        escapedQuery: String
+    ): PagingSource<Int, Channel>
+
+    @Query(
+        """
+            SELECT * FROM streams
+            WHERE playlist_url = :playlistUrl
+            AND hidden = 0
+            AND `group` NOT IN (:hiddenCategories)
+            AND LOWER(title) LIKE '%' || LOWER(:escapedQuery) || '%' ESCAPE '\'
+            ORDER BY
+                CASE
+                    WHEN LOWER(title) = LOWER(:rawQuery) THEN 0
+                    WHEN LOWER(title) LIKE LOWER(:escapedQuery) || '%' ESCAPE '\' THEN 1
+                    WHEN LOWER(title) LIKE '% ' || LOWER(:escapedQuery) || '%' ESCAPE '\' THEN 2
+                    ELSE 3
+                END,
+                favourite DESC,
+                seen DESC,
+                title COLLATE NOCASE ASC
+        """
+    )
+    fun queryByPlaylist(
+        playlistUrl: String,
+        rawQuery: String,
+        escapedQuery: String,
+        hiddenCategories: List<String>
     ): PagingSource<Int, Channel>
 
     @Query(

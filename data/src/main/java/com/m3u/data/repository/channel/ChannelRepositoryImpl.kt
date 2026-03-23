@@ -18,6 +18,10 @@ internal class ChannelRepositoryImpl @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val settings: Settings,
 ) : ChannelRepository {
+    private companion object {
+        const val HIDDEN_CATEGORY_SENTINEL = "__m3u_hidden_category_sentinel__"
+    }
+
     override fun observe(id: Int): Flow<Channel?> = channelDao
         .observeById(id)
         .catch { emit(null) }
@@ -100,6 +104,38 @@ internal class ChannelRepositoryImpl @Inject constructor(
         .catch { emit(emptyList()) }
 
     override fun search(query: String): PagingSource<Int, Channel> {
-        return channelDao.query(query)
+        val normalizedQuery = query.trim()
+        return channelDao.query(
+            rawQuery = normalizedQuery,
+            escapedQuery = normalizedQuery.escapeForSqlLike()
+        )
+    }
+
+    override fun searchByPlaylist(
+        playlistUrl: String,
+        query: String,
+        hiddenCategories: List<String>
+    ): PagingSource<Int, Channel> {
+        val normalizedQuery = query.trim()
+        return channelDao.queryByPlaylist(
+            playlistUrl = playlistUrl,
+            rawQuery = normalizedQuery,
+            escapedQuery = normalizedQuery.escapeForSqlLike(),
+            hiddenCategories = hiddenCategories.ifEmpty { listOf(HIDDEN_CATEGORY_SENTINEL) }
+        )
+    }
+}
+
+private fun String.escapeForSqlLike(): String = buildString(length) {
+    this@escapeForSqlLike.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '%', '_' -> {
+                append('\\')
+                append(character)
+            }
+
+            else -> append(character)
+        }
     }
 }

@@ -5,6 +5,7 @@ package com.m3u.core.architecture.preferences
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +22,8 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -70,14 +73,43 @@ fun <T> mutablePreferenceOf(
 ): MutableState<T> {
     val state = preferenceOf(key, initial)
     val dataStore: Settings = LocalContext.current.settings
-    return remember(key, initial) {
+    val localState = remember(key, initial) {
+        mutableStateOf(initial)
+    }
+    val pendingState = remember(key) {
+        mutableStateOf<Any?>(NoPendingPreferenceWrite)
+    }
+    val writeJob = remember(key) {
+        mutableStateOf<Job?>(null)
+    }
+    LaunchedEffect(state.value) {
+        when (val pending = pendingState.value) {
+            NoPendingPreferenceWrite -> localState.value = state.value
+            state.value -> {
+                pendingState.value = NoPendingPreferenceWrite
+                localState.value = state.value
+            }
+        }
+    }
+    return remember(key, initial, coroutineScope, dataStore) {
         object : MutableState<T> {
             override fun component1(): T = this.value
             override fun component2(): (T) -> Unit = { this.value = it }
             override var value: T
-                get() = state.value
+                get() = localState.value
                 set(value) {
-                    coroutineScope.launch {
+                    localState.value = value
+                    pendingState.value = value
+                    val previousWriteJob = writeJob.value
+                    writeJob.value = coroutineScope.launch {
+                        previousWriteJob?.cancelAndJoin()
+                        if (pendingState.value != value) {
+                            return@launch
+                        }
+                        if (state.value == value) {
+                            pendingState.value = NoPendingPreferenceWrite
+                            return@launch
+                        }
                         dataStore.edit {
                             it[key] = value
                         }
@@ -145,6 +177,7 @@ suspend fun Settings.applyDefaultValues() {
 }
 
 private val applied = AtomicBoolean(false)
+private object NoPendingPreferenceWrite
 
 object PreferencesKeys {
     val PLAYLIST_STRATEGY = intPreferencesKey("playlist-strategy")

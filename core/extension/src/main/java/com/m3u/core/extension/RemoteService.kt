@@ -17,7 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.ServiceLoader
-import java.util.concurrent.ConcurrentHashMap
 
 class RemoteService : Service() {
     private val job = SupervisorJob()
@@ -39,7 +38,7 @@ class RemoteService : Service() {
             .single()
     }
 
-    private val binders = ConcurrentHashMap<String, IRemoteService.Stub>()
+    private val binder: IRemoteService.Stub by lazy { RemoteServiceImpl() }
 
     private inner class RemoteServiceImpl : IRemoteService.Stub() {
         override fun call(
@@ -57,30 +56,19 @@ class RemoteService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? {
         Log.d(TAG, "onBind: $intent")
-        intent ?: return null
-        val packageName = intent.resolveActivity(application.packageManager).packageName
-        val binder = binders.getOrPut(packageName) {
-            RemoteServiceImpl()
-        }
         return binder
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         Log.d(TAG, "onUnbind: $intent")
-        intent ?: return super.onUnbind(intent)
-        val packageName = intent.`package` ?: return super.onUnbind(intent)
-        val binder = binders.remove(packageName)
-        if (binder != null) {
-            return true
-        }
         return super.onUnbind(intent)
     }
 
     override fun onCreate() {
         super.onCreate()
         val channel = NotificationChannel(
-            "remote-service",
-            "remote-service",
+            REMOTE_SERVICE_CHANNEL_ID,
+            REMOTE_SERVICE_CHANNEL_ID,
             NotificationManager.IMPORTANCE_LOW
         )
         channel.description = "Remote service is running"
@@ -93,7 +81,7 @@ class RemoteService : Service() {
         ServiceCompat.startForeground(
             this,
             startId,
-            NotificationCompat.Builder(this, "remote_service")
+            NotificationCompat.Builder(this, REMOTE_SERVICE_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_info_details)
                 .setContentTitle("Remote Service")
                 .setContentText("Remote service is running")
@@ -119,5 +107,6 @@ class RemoteService : Service() {
 
     companion object {
         private const val TAG = "RemoteClient"
+        private const val REMOTE_SERVICE_CHANNEL_ID = "remote-service"
     }
 }

@@ -138,10 +138,14 @@ internal fun PlaylistRoute(
     val sort by viewModel.sort.collectAsStateWithLifecycle()
 
     val query by viewModel.query.collectAsStateWithLifecycle()
+    val isQueryActive by viewModel.isQueryActive.collectAsStateWithLifecycle()
     val scrollUp by viewModel.scrollUp.collectAsStateWithLifecycle()
 
-    val writeExternalPermission =
+    val writeExternalPermission = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
         rememberPermissionState(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    } else {
+        null
+    }
 
     val postNotificationPermission = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) null
     else rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
@@ -171,6 +175,7 @@ internal fun PlaylistRoute(
     PlaylistScreen(
         title = playlist?.title.orEmpty(),
         query = query,
+        isQueryActive = isQueryActive,
         onQuery = { viewModel.query.value = it },
         rowCount = rowCount,
         zapping = zapping,
@@ -219,6 +224,10 @@ internal fun PlaylistRoute(
         favourite = viewModel::favourite,
         hide = viewModel::hide,
         savePicture = { id ->
+            if (writeExternalPermission == null) {
+                viewModel.savePicture(id)
+                return@PlaylistScreen
+            }
             writeExternalPermission.checkPermissionOrRationale {
                 viewModel.savePicture(id)
             }
@@ -279,6 +288,7 @@ internal fun PlaylistRoute(
 private fun PlaylistScreen(
     title: String,
     query: String,
+    isQueryActive: Boolean,
     onQuery: (String) -> Unit,
     rowCount: Int,
     zapping: Channel?,
@@ -338,13 +348,15 @@ private fun PlaylistScreen(
     var mediaSheetValue: MediaSheetValue.PlaylistScreen by remember { mutableStateOf(MediaSheetValue.PlaylistScreen()) }
     var isSortSheetVisible by rememberSaveable { mutableStateOf(false) }
 
-    LifecycleResumeEffect(refreshing) {
+    LifecycleResumeEffect(refreshing, isQueryActive) {
         Metadata.actions = buildList {
-            Action(
-                icon = Icons.AutoMirrored.Rounded.Sort,
-                contentDescription = "sort",
-                onClick = { isSortSheetVisible = true }
-            ).also { add(it) }
+            if (!isQueryActive) {
+                Action(
+                    icon = Icons.AutoMirrored.Rounded.Sort,
+                    contentDescription = "sort",
+                    onClick = { isSortSheetVisible = true }
+                ).also { add(it) }
+            }
             Action(
                 icon = Icons.Rounded.Refresh,
                 enabled = !refreshing,
@@ -380,7 +392,12 @@ private fun PlaylistScreen(
     var isExpanded by remember(sort == Sort.MIXED) {
         mutableStateOf(false)
     }
-    BackHandler(isExpanded) { isExpanded = false }
+    LaunchedEffect(categories.size) {
+        if (isExpanded && categories.size <= 1) {
+            isExpanded = false
+        }
+    }
+    BackHandler(isExpanded && categories.size > 1) { isExpanded = false }
 
     var targetPageIndex: Event<Int> by remember { mutableStateOf(Event.Handled()) }
 
@@ -447,7 +464,8 @@ private fun PlaylistScreen(
             .padding(contentPadding.minus(contentPadding.only(WindowInsetsSides.Bottom)))
             .then(modifier)
     ) {
-        if (!isExpanded) {
+        val showTabsOnly = isExpanded && categories.size > 1
+        if (!showTabsOnly) {
             AnimatedVisibility(
                 visible = categories.size > 1,
                 enter = fadeIn(animationSpec = tween(400)),
