@@ -24,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.LazyPagingItems
 import com.m3u.data.database.model.ProgrammeSearchResult
 import com.m3u.i18n.R
 import com.m3u.smartphone.ui.common.helper.LocalHelper
@@ -49,7 +50,7 @@ fun EpgSearchRoute(
     EpgSearchScreen(
         query = query,
         category = category,
-        results = List(results.itemCount) { results[it] },
+        results = results,
         contentPadding = contentPadding,
         onQueryChanged = { viewModel.query.value = it },
         onCategoryChanged = { viewModel.category.value = it },
@@ -66,7 +67,7 @@ fun EpgSearchRoute(
 private fun EpgSearchScreen(
     query: String,
     category: String,
-    results: List<ProgrammeSearchResult?>,
+    results: LazyPagingItems<ProgrammeSearchResult>,
     contentPadding: PaddingValues,
     onQueryChanged: (String) -> Unit,
     onCategoryChanged: (String) -> Unit,
@@ -97,7 +98,8 @@ private fun EpgSearchScreen(
             )
         }
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(results) { result ->
+            items(results.itemCount) { index ->
+                val result = results[index]
                 result ?: return@items
                 ProgrammeItem(result = result, onWatch = { onWatch(result) })
             }

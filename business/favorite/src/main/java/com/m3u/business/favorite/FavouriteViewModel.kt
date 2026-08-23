@@ -98,10 +98,10 @@ class FavoriteViewModel @Inject constructor(
         viewModelScope.launch {
             channelRepository.favouriteOrUnfavourite(id)
         }
-
-        suspend fun importFavorites(content: String): ImportResult =
-            channelRepository.importFavorites(content)
     }
+
+    suspend fun importFavorites(content: String): ImportResult =
+        channelRepository.importFavorites(content)
 
     fun createShortcut(context: Context, id: Int) {
         val shortcutId = "channel_$id"

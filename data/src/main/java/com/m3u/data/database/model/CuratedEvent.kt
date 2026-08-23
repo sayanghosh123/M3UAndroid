@@ -2,6 +2,7 @@ package com.m3u.data.database.model
 
 import androidx.compose.runtime.Immutable
 import androidx.room.ColumnInfo
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
