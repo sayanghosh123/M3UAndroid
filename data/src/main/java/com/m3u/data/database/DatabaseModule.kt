@@ -8,6 +8,7 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.m3u.data.database.dao.ChannelDao
 import com.m3u.data.database.dao.ColorSchemeDao
+import com.m3u.data.database.dao.CuratedEventDao
 import com.m3u.data.database.dao.EpisodeDao
 import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.dao.ProgrammeDao
@@ -75,4 +76,10 @@ internal object DatabaseModule {
     fun provideColorSchemeDao(
         database: M3UDatabase
     ): ColorSchemeDao = database.colorSchemeDao()
+
+    @Provides
+    @Singleton
+    fun provideCuratedEventDao(
+        database: M3UDatabase
+    ): CuratedEventDao = database.curatedEventDao()
 }

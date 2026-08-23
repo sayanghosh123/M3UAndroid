@@ -10,6 +10,8 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.m3u.data.database.model.Playlist
 import com.m3u.smartphone.ui.business.extension.ExtensionRoute
+import com.m3u.smartphone.ui.business.epg.EpgSearchRoute
+import com.m3u.smartphone.ui.business.epg.SportsRoute
 import com.m3u.smartphone.ui.material.ktx.Edge
 import com.m3u.smartphone.ui.material.ktx.blurEdge
 import com.m3u.smartphone.ui.business.favourite.FavoriteRoute
@@ -57,6 +59,28 @@ fun NavGraphBuilder.rootGraph(
                     edge = Edge.Bottom,
                     color = MaterialTheme.colorScheme.background
                 )
+        )
+    }
+
+    composable(
+        route = Destination.EpgSearch.name,
+        enterTransition = { fadeIn() },
+        exitTransition = { fadeOut() }
+    ) {
+        EpgSearchRoute(
+            contentPadding = contentPadding,
+            navigateToChannel = navigateToChannel,
+        )
+    }
+
+    composable(
+        route = Destination.Sports.name,
+        enterTransition = { fadeIn() },
+        exitTransition = { fadeOut() }
+    ) {
+        SportsRoute(
+            contentPadding = contentPadding,
+            navigateToChannel = navigateToChannel,
         )
     }
 

@@ -2,10 +2,13 @@ package com.m3u.smartphone.ui.business.favourite
 
 import android.content.res.Configuration
 import android.view.KeyEvent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,12 +34,14 @@ import com.m3u.core.architecture.preferences.mutablePreferenceOf
 import com.m3u.core.architecture.preferences.preferenceOf
 import com.m3u.core.foundation.ui.thenIf
 import com.m3u.core.util.basic.title
+import com.m3u.core.util.context.toast
 import com.m3u.core.wrapper.Sort
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.isSeries
 import com.m3u.data.service.MediaCommand
 import com.m3u.i18n.R
 import com.m3u.smartphone.ui.business.favourite.components.FavoriteGallery
+import com.m3u.smartphone.ui.business.epg.readImportText
 import com.m3u.smartphone.ui.common.helper.Action
 import com.m3u.smartphone.ui.common.helper.LocalHelper
 import com.m3u.smartphone.ui.common.helper.Metadata
@@ -73,6 +78,27 @@ fun FavoriteRoute(
     val sort by viewModel.sort.collectAsStateWithLifecycle()
 
     val sheetState = rememberModalBottomSheetState()
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            runCatching {
+                viewModel.importFavorites(context.contentResolver.readImportText(uri))
+            }.onSuccess {
+                context.toast(
+                    context.getString(
+                        R.string.feat_favorite_import_result,
+                        it.imported,
+                        it.total,
+                        it.unmatched.size,
+                    )
+                )
+            }.onFailure {
+                context.toast(context.getString(R.string.feat_favorite_import_failed))
+            }
+        }
+    }
 
     var isSortSheetVisible by rememberSaveable { mutableStateOf(false) }
     var mediaSheetValue: MediaSheetValue.FavoriteScreen by remember {
@@ -86,6 +112,13 @@ fun FavoriteRoute(
         Metadata.color = Color.Unspecified
         Metadata.contentColor = Color.Unspecified
         Metadata.actions = listOf(
+            Action(
+                icon = Icons.Rounded.UploadFile,
+                contentDescription = context.getString(R.string.feat_favorite_import),
+                onClick = {
+                    importLauncher.launch(arrayOf("text/plain", "application/json"))
+                }
+            ),
             Action(
                 icon = Icons.AutoMirrored.Rounded.Sort,
                 contentDescription = "sort",

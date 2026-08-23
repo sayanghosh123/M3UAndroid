@@ -206,6 +206,20 @@ interface ChannelDao {
     @Query("UPDATE streams SET favourite = :target WHERE id = :id")
     suspend fun favouriteOrUnfavourite(id: Int, target: Boolean)
 
+    @Query(
+        """
+        SELECT * FROM streams
+        WHERE relation_id = :identifier COLLATE NOCASE
+           OR title = :identifier COLLATE NOCASE
+        ORDER BY CASE WHEN relation_id = :identifier COLLATE NOCASE THEN 0 ELSE 1 END
+        LIMIT 1
+        """
+    )
+    suspend fun findByRelationIdOrTitle(identifier: String): Channel?
+
+    @Query("UPDATE streams SET favourite = 1 WHERE id IN (:ids)")
+    suspend fun favouriteAll(ids: List<Int>)
+
     @Query("UPDATE streams SET hidden = :target WHERE id = :id")
     suspend fun hide(id: Int, target: Boolean)
 

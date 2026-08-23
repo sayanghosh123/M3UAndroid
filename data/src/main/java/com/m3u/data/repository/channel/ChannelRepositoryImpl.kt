@@ -7,8 +7,12 @@ import com.m3u.data.database.dao.ChannelDao
 import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.data.database.model.Channel
+import com.m3u.data.database.model.ImportResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import javax.inject.Inject
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -66,8 +70,33 @@ internal class ChannelRepositoryImpl @Inject constructor(
         channelDao.favouriteOrUnfavourite(id, !current)
     }
 
+    override suspend fun importFavorites(content: String): ImportResult {
+        val identifiers = parseFavoriteIdentifiers(content)
+        val matched = identifiers.mapNotNull { identifier ->
+            channelDao.findByRelationIdOrTitle(identifier)
+        }.distinctBy(Channel::id)
+        channelDao.favouriteAll(matched.map(Channel::id))
+        val matchedKeys = matched.flatMap { listOfNotNull(it.relationId, it.title) }
+            .map { it.lowercase() }
+            .toSet()
+        val unmatched = identifiers.filterNot { it.lowercase() in matchedKeys }
+        return ImportResult(matched.size, identifiers.size, unmatched)
+    }
+
     override suspend fun hide(id: Int, target: Boolean) {
         channelDao.hide(id, target)
+    }
+
+    private fun parseFavoriteIdentifiers(content: String): List<String> {
+        val trimmed = content.trim()
+        val values = if (trimmed.startsWith("[")) {
+            val array = Json.parseToJsonElement(trimmed) as? JsonArray
+                ?: throw IllegalArgumentException("Favorites JSON must be an array")
+            array.mapNotNull { (it as? JsonPrimitive)?.content }
+        } else {
+            trimmed.lineSequence().toList()
+        }
+        return values.map(String::trim).filter(String::isNotEmpty).distinct()
     }
 
     override suspend fun reportPlayed(id: Int) {

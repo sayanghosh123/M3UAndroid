@@ -22,6 +22,7 @@ import com.m3u.core.wrapper.Sort
 import com.m3u.core.wrapper.mapResource
 import com.m3u.core.wrapper.resource
 import com.m3u.data.database.model.Channel
+import com.m3u.data.database.model.ImportResult
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.parser.xtream.XtreamChannelInfo
 import com.m3u.data.repository.channel.ChannelRepository
@@ -97,6 +98,9 @@ class FavoriteViewModel @Inject constructor(
         viewModelScope.launch {
             channelRepository.favouriteOrUnfavourite(id)
         }
+
+        suspend fun importFavorites(content: String): ImportResult =
+            channelRepository.importFavorites(content)
     }
 
     fun createShortcut(context: Context, id: Int) {
