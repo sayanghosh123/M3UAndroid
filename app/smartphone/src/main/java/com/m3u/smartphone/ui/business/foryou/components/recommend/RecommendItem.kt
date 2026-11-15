@@ -43,11 +43,11 @@ import androidx.compose.ui.util.lerp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.m3u.business.foryou.Recommend
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.preferenceOf
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.preferenceOf
 import com.m3u.core.foundation.components.AbsoluteSmoothCornerShape
 import com.m3u.core.foundation.ui.composableOf
-import com.m3u.core.util.basic.title
+import com.m3u.core.foundation.util.basic.title
 import com.m3u.i18n.R.string
 import com.m3u.smartphone.ui.material.brush.RecommendCardContainerBrush
 import com.m3u.smartphone.ui.material.components.FontFamilies
@@ -186,7 +186,7 @@ private fun UnseenContent(spec: Recommend.UnseenSpec) {
         cover = spec.channel.cover.orEmpty(),
         primaryContent = {
             Text(
-                text = stringResource(string.feat_foryou_recommend_unseen_label).uppercase(),
+                text = stringResource(string.feat_foryou_recommend_unseen_label),
                 maxLines = 1
             )
         },
@@ -225,7 +225,7 @@ private fun DiscoverContent(spec: Recommend.DiscoverSpec) {
     val playlist = spec.playlist
     val category = spec.category
     Text(
-        text = stringResource(string.feat_foryou_recommend_unseen_label).uppercase(),
+        text = stringResource(string.feat_foryou_recommend_unseen_label),
         style = MaterialTheme.typography.labelLarge,
         maxLines = 1
     )
@@ -259,7 +259,7 @@ private fun CwContent(spec: Recommend.CwSpec) {
         cover = channel.cover.orEmpty(),
         primaryContent = {
             Text(
-                text = stringResource(string.feat_foryou_recommend_cw_label).uppercase(),
+                text = stringResource(string.feat_foryou_recommend_cw_label),
                 maxLines = 1
             )
         },

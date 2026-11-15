@@ -15,43 +15,51 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.map as pagingMap
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkQuery
 import com.m3u.business.playlist.PlaylistMessage.ChannelCoverSaved
-import com.m3u.core.Contracts
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.Settings
-import com.m3u.core.architecture.preferences.flowOf
-import com.m3u.core.util.coroutine.flatmapCombined
-import com.m3u.core.wrapper.Event
-import com.m3u.core.wrapper.Resource
-import com.m3u.core.wrapper.Sort
-import com.m3u.core.wrapper.handledEvent
-import com.m3u.core.wrapper.mapResource
-import com.m3u.core.wrapper.resource
+import com.m3u.core.foundation.Contracts
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.Settings
+import com.m3u.core.foundation.architecture.preferences.flowOf
+import com.m3u.core.foundation.util.coroutine.flatmapCombined
+import com.m3u.core.foundation.wrapper.Event
+import com.m3u.core.foundation.wrapper.Resource
+import com.m3u.core.foundation.wrapper.Sort
+import com.m3u.core.foundation.wrapper.handledEvent
+import com.m3u.core.foundation.wrapper.mapResource
+import com.m3u.core.foundation.wrapper.resource
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.database.model.Programme
 import com.m3u.data.database.model.isSeries
-import com.m3u.data.parser.xtream.XtreamChannelInfo
+import com.m3u.data.parser.xtream.XtreamEpisodeInfo
 import com.m3u.data.repository.channel.ChannelRepository
 import com.m3u.data.repository.media.MediaRepository
 import com.m3u.data.repository.playlist.PlaylistRepository
+import com.m3u.data.repository.playlist.PlaylistRefreshReason
 import com.m3u.data.repository.programme.ProgrammeRepository
 import com.m3u.data.service.MediaCommand
 import com.m3u.data.service.Messager
 import com.m3u.data.service.PlayerManager
 import com.m3u.data.worker.SubscriptionWorker
+import com.m3u.data.worker.playlistWorkTag
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -67,10 +75,17 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private const val GLOBAL_SEARCH_KEY = "__global_search__"
+
+@Immutable
+data class ChannelWithProgramme(
+    val channel: Channel,
+    val programme: Programme?,
+)
 
 @HiltViewModel
 class PlaylistViewModel @Inject constructor(
@@ -119,11 +134,16 @@ class PlaylistViewModel @Inject constructor(
                 WorkInfo.State.ENQUEUED,
             )
         )
-        .combine(playlistUrl) { infos, playlistUrl ->
+        .combine(playlist) { infos, playlist ->
+            val playlistUrl = playlist?.url ?: return@combine false
+            val workTag = playlistWorkTag(playlistUrl)
             infos.any { info ->
-                info.tags.containsAll(
-                    listOf(SubscriptionWorker.TAG, playlistUrl)
-                )
+                SubscriptionWorker.TAG in info.tags &&
+                    (
+                        workTag in info.tags ||
+                            // Compatibility with work enqueued before hashed tags shipped.
+                            playlistUrl in info.tags
+                        )
             }
         }
         .flowOn(Dispatchers.Default)
@@ -133,10 +153,17 @@ class PlaylistViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000)
         )
 
-    fun refresh() {
+    fun refresh(background: Boolean = false) {
         val url = playlistUrl.value
         viewModelScope.launch {
-            playlistRepository.refresh(url)
+            playlistRepository.refresh(
+                url = url,
+                reason = if (background) {
+                    PlaylistRefreshReason.BACKGROUND
+                } else {
+                    PlaylistRefreshReason.USER
+                },
+            )
         }
     }
 
@@ -213,10 +240,6 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
-    suspend fun getProgrammeCurrently(channelId: Int): Programme? {
-        return programmeRepository.getProgrammeCurrently(channelId)
-    }
-
     private val sortIndex: MutableStateFlow<Int> = MutableStateFlow(0)
 
     val sort: StateFlow<Sort> = sortIndex
@@ -273,13 +296,30 @@ class PlaylistViewModel @Inject constructor(
                 else -> playlistRepository.observeCategoriesByPlaylistUrlIgnoreHidden(playlistUrl, query)
             }
         }
+            .debounceAfterFirst(1.seconds)
             .stateIn(
                 scope = viewModelScope,
                 initialValue = emptyList(),
                 started = SharingStarted.Lazily
             )
 
-    val channels: StateFlow<Map<String, Flow<PagingData<Channel>>>> = combine(
+    private val currentProgrammes: StateFlow<Map<String, Programme>> = playlistUrl
+        .flatMapLatest { playlistUrl ->
+            channelRepository.observeRelationIdsByPlaylistUrl(playlistUrl)
+                .map { it.toSet() }
+                .distinctUntilChanged()
+                .debounceAfterFirst(1.seconds)
+                .mapLatest {
+                    programmeRepository.getProgrammesCurrently(playlistUrl)
+                }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            initialValue = emptyMap(),
+            started = SharingStarted.WhileSubscribed(5_000L)
+        )
+
+    private val channelPages: StateFlow<Map<String, Flow<PagingData<Channel>>>> = combine(
         playlistUrl,
         playlist,
         categories,
@@ -291,7 +331,7 @@ class PlaylistViewModel @Inject constructor(
             hiddenCategories = playlist?.hiddenCategories.orEmpty(),
             query = query,
             sort = sort,
-            categories = categories
+            categories = categories,
         )
     }
         .mapLatest { (playlistUrl, hiddenCategories, query, sort, categories) ->
@@ -306,6 +346,7 @@ class PlaylistViewModel @Inject constructor(
                             )
                         }
                             .flow
+                            .cachedIn(viewModelScope)
                     )
                 }
 
@@ -320,6 +361,7 @@ class PlaylistViewModel @Inject constructor(
                             )
                         }
                             .flow
+                            .cachedIn(viewModelScope)
                     )
                 }
 
@@ -333,6 +375,7 @@ class PlaylistViewModel @Inject constructor(
                         )
                     }
                         .flow
+                        .cachedIn(viewModelScope)
                 }
             }
         }
@@ -341,6 +384,46 @@ class PlaylistViewModel @Inject constructor(
             initialValue = emptyMap(),
             started = SharingStarted.Lazily
         )
+
+    val channels: StateFlow<Map<String, Flow<PagingData<ChannelWithProgramme>>>> = combine(
+        channelPages,
+        currentProgrammes
+    ) { pages, currentProgrammes ->
+        pages.mapValues { (_, flow) ->
+            flow.withProgrammes(currentProgrammes)
+        }
+    }
+        .stateIn(
+            scope = viewModelScope,
+            initialValue = emptyMap(),
+            started = SharingStarted.Lazily
+        )
+
+    private fun Flow<PagingData<Channel>>.withProgrammes(
+        currentProgrammes: Map<String, Programme>
+    ): Flow<PagingData<ChannelWithProgramme>> {
+        return map { data ->
+            // Recreate the transform so paged channel items show refreshed programme metadata.
+            data.pagingMap { channel ->
+                ChannelWithProgramme(
+                    channel = channel,
+                    programme = channel.relationId?.let(currentProgrammes::get)
+                )
+            }
+        }
+    }
+
+    private fun <T> Flow<T>.debounceAfterFirst(timeout: Duration): Flow<T> = channelFlow {
+        var isFirst = true
+        collectLatest { value ->
+            if (isFirst) {
+                isFirst = false
+            } else {
+                delay(timeout)
+            }
+            send(value)
+        }
+    }
 
     val pinnedCategories: StateFlow<List<String>> = playlist
         .map { it?.pinnedCategories ?: emptyList() }
@@ -392,7 +475,7 @@ class PlaylistViewModel @Inject constructor(
     val series = MutableStateFlow<Channel?>(null)
     val seriesReplay = MutableStateFlow(0)
 
-    val episodes: StateFlow<Resource<List<XtreamChannelInfo.Episode>>> = series
+    val episodes: StateFlow<Resource<List<XtreamEpisodeInfo>>> = series
         .combine(seriesReplay) { series, _ -> series }
         .flatMapLatest { series ->
             if (series == null) flow {}

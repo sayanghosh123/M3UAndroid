@@ -20,3 +20,9 @@ jks.txt
 *.jks
 /sample/
 /.kotlin
+__pycache__/
+*.pyc
+testing/mock-server/bin/
+testing/mock-server/build/
+testing/extension-reference/build/
+samples/*/build/

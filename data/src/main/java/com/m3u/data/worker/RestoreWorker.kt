@@ -11,8 +11,10 @@ import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.m3u.data.R
 import com.m3u.data.repository.playlist.PlaylistRepository
+import com.m3u.i18n.R.string
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 
 @HiltWorker
 class RestoreWorker @AssistedInject constructor(
@@ -28,7 +30,9 @@ class RestoreWorker @AssistedInject constructor(
         uri ?: return Result.failure()
         try {
             playlistRepository.restoreOrThrow(uri)
-        } catch (e: Exception) {
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
             return Result.failure()
         }
         return Result.success()
@@ -41,23 +45,26 @@ class RestoreWorker @AssistedInject constructor(
     private fun createNotification(): Notification {
         return Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.round_file_download_24)
-            .setContentTitle("Backing up")
+            .setContentTitle(context.getString(string.data_worker_restore_notification_title))
             .build()
     }
 
     private fun createChannel() {
         val channel = NotificationChannel(
-            CHANNEL_ID, NOTIFICATION_NAME, NotificationManager.IMPORTANCE_LOW
+            CHANNEL_ID,
+            context.getString(string.data_worker_restore_notification_channel_name),
+            NotificationManager.IMPORTANCE_LOW
         )
-        channel.description = "display subscribe task progress"
+        channel.description =
+            context.getString(string.data_worker_restore_notification_channel_description)
         notificationManager.createNotificationChannel(channel)
     }
 
     companion object {
         private const val CHANNEL_ID = "subscribe_channel"
-        private const val NOTIFICATION_NAME = "restore task"
         private const val NOTIFICATION_ID = 1226
         const val TAG = "restore"
+        const val UNIQUE_WORK_NAME = "playlist-restore"
         const val INPUT_URI = "uri"
     }
 }

@@ -33,13 +33,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.m3u.business.foryou.ForyouViewModel
 import com.m3u.business.foryou.Recommend
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.mutablePreferenceOf
-import com.m3u.core.architecture.preferences.preferenceOf
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.mutablePreferenceOf
+import com.m3u.core.foundation.architecture.preferences.preferenceOf
 import com.m3u.core.foundation.ui.composableOf
 import com.m3u.core.foundation.ui.thenIf
-import com.m3u.core.util.basic.title
-import com.m3u.core.wrapper.Resource
+import com.m3u.core.foundation.util.basic.title
+import com.m3u.core.foundation.wrapper.Resource
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.database.model.PlaylistWithCount
@@ -78,6 +78,7 @@ fun ForyouRoute(
     val godMode by preferenceOf(PreferencesKeys.GOD_MODE)
 
     val title = stringResource(string.ui_title_foryou)
+    val addContentDescription = stringResource(string.ui_action_add)
 
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val specs by viewModel.specs.collectAsStateWithLifecycle()
@@ -94,7 +95,7 @@ fun ForyouRoute(
         Metadata.actions = listOf(
             Action(
                 icon = Icons.Rounded.Add,
-                contentDescription = "add",
+                contentDescription = addContentDescription,
                 onClick = navigateToSettingPlaylistManagement
             )
         )

@@ -54,22 +54,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
 import coil.compose.SubcomposeAsyncImage
 import com.m3u.core.foundation.components.AbsoluteSmoothCornerShape
 import com.m3u.core.foundation.components.CircularProgressIndicator
 import com.m3u.core.foundation.ui.composableOf
 import com.m3u.core.foundation.ui.thenIf
-import com.m3u.core.util.collections.indexOf
+import com.m3u.core.foundation.util.collections.indexOf
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Episode
 import com.m3u.data.database.model.Programme
 import com.m3u.data.database.model.ProgrammeRange
 import com.m3u.data.service.MediaCommand
+import com.m3u.i18n.R.string
 import com.m3u.smartphone.TimeUtils.formatEOrSh
 import com.m3u.smartphone.TimeUtils.toEOrSh
 import com.m3u.smartphone.ui.common.helper.LocalHelper
@@ -104,6 +110,8 @@ internal fun PlayerPanel(
     onRequestClosed: () -> Unit,
 ) {
     val spacing = LocalSpacing.current
+    val layoutDirection = LocalLayoutDirection.current
+    val formatLocale = LocalConfiguration.current.locales[0]
 
     Surface(
         shape = if (useVertical) AbsoluteSmoothCornerShape(
@@ -111,12 +119,21 @@ internal fun PlayerPanel(
             cornerRadiusTR = spacing.medium,
             smoothnessAsPercentTL = 100,
             smoothnessAsPercentTR = 100
-        ) else AbsoluteSmoothCornerShape(
-            cornerRadiusTL = spacing.medium,
-            cornerRadiusBL = spacing.medium,
-            smoothnessAsPercentTL = 100,
-            smoothnessAsPercentBL = 100
-        ),
+        ) else if (layoutDirection == LayoutDirection.Ltr) {
+            AbsoluteSmoothCornerShape(
+                cornerRadiusTL = spacing.medium,
+                cornerRadiusBL = spacing.medium,
+                smoothnessAsPercentTL = 100,
+                smoothnessAsPercentBL = 100
+            )
+        } else {
+            AbsoluteSmoothCornerShape(
+                cornerRadiusTR = spacing.medium,
+                cornerRadiusBR = spacing.medium,
+                smoothnessAsPercentTR = 100,
+                smoothnessAsPercentBR = 100
+            )
+        },
         shadowElevation = 4.dp,
         modifier = modifier
     ) {
@@ -204,8 +221,8 @@ internal fun PlayerPanel(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text(
-                                        text = "${start.formatEOrSh(false)} - ${
-                                            end.formatEOrSh(false)
+                                        text = "${start.formatEOrSh(false, locale = formatLocale)} - ${
+                                            end.formatEOrSh(false, locale = formatLocale)
                                         }",
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -319,7 +336,7 @@ fun PlayerPanelImpl(
                     modifier = Modifier.basicMarquee()
                 )
                 Text(
-                    text = playlistTitle.trim().uppercase(),
+                    text = playlistTitle.trim(),
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
                     color = LocalContentColor.current.copy(0.54f),
@@ -328,11 +345,14 @@ fun PlayerPanelImpl(
                     modifier = Modifier.basicMarquee()
                 )
             }
-            Icon(
+            IconButton(
+                onClick = onRequestClosed,
+            ) {
+                Icon(
                 imageVector = Icons.Rounded.Close,
-                contentDescription = null,
-                modifier = Modifier.clickable { onRequestClosed() }
-            )
+                    contentDescription = stringResource(string.ui_action_close_player_panel),
+                )
+            }
         }
 
 
@@ -381,7 +401,7 @@ private fun ChannelGallery(
             is ChannelGalleryValue.PagingChannel -> {
                 val channels = value.channels
                 val channelId = value.channelId
-                items(channels.itemCount) { i ->
+                items(channels.itemCount, key = channels.itemKey { it.id }) { i ->
                     channels[i]?.let { channel ->
                         val isPlaying = channel.id == channelId
                         ChannelGalleryItem(

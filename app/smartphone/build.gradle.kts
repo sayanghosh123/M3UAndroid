@@ -1,16 +1,31 @@
+import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
+
 plugins {
     alias(libs.plugins.com.android.application)
-    alias(libs.plugins.org.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.com.google.dagger.hilt.android)
     alias(libs.plugins.com.google.devtools.ksp)
     alias(libs.plugins.androidx.baselineprofile)
     id("kotlin-parcelize")
+    id("dev.oxyroid.native-load")
 }
+
+extensions.configure<KotlinAndroidProjectExtension> {
+    compilerOptions {
+        optIn.addAll(
+            "androidx.compose.material3.ExperimentalMaterial3Api",
+            "androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi",
+            "androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi",
+            "com.google.accompanist.permissions.ExperimentalPermissionsApi",
+        )
+    }
+}
+
+val m3uMockServerUrl = providers.gradleProperty("m3uMockServerUrl").orElse("http://10.0.2.2:8080")
 
 android {
     namespace = "com.m3u.smartphone"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.m3u.smartphone"
         minSdk = 26
@@ -19,6 +34,7 @@ android {
         versionName = "1.15.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["m3uMockServerUrl"] = m3uMockServerUrl.get()
     }
     buildTypes {
         release {
@@ -29,6 +45,7 @@ android {
         debug {
             isMinifyEnabled = false
             isShrinkResources = false
+            isPseudoLocalesEnabled = true
             signingConfig = signingConfigs.getByName("debug")
         }
         all {
@@ -39,7 +56,6 @@ android {
             )
         }
     }
-    aaptOptions.cruncherEnabled = false
     splits {
         abi {
             val benchmark = project
@@ -75,14 +91,18 @@ android {
     packaging {
         resources.excludes += "META-INF/**"
     }
-    applicationVariants.all {
-        outputs
-            .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
-            .forEach { output ->
-                val abi = output.getFilter("ABI") ?: "universal"
-                output.outputFileName = "${versionName}_$abi.apk"
-            }
-    }
+}
+
+tasks.matching { task ->
+    task.name.startsWith("connected") && task.name.endsWith("AndroidTest")
+}.configureEach {
+    dependsOn(":testing:mock-server:startMockServer")
+    finalizedBy(":testing:mock-server:stopMockServer")
+}
+
+tasks.matching { task -> task.name == "connectedDebugAndroidTest" }.configureEach {
+    dependsOn(":testing:extension-reference:installDebug")
+    finalizedBy(":testing:extension-reference:uninstallDebug")
 }
 
 hilt {
@@ -96,14 +116,10 @@ baselineProfile {
 }
 
 dependencies {
+    implementation(project(":extension:api"))
     implementation(project(":i18n"))
-    implementation(project(":core"))
     implementation(project(":core:foundation"))
-    implementation(project(":core:extension"))
     implementation(project(":data"))
-    implementation(libs.m3u.extension.api)
-    implementation(libs.m3u.extension.annotation)
-    ksp(libs.m3u.extension.processor)
     // business
     implementation(project(":business:foryou"))
     implementation(project(":business:favorite"))
@@ -111,7 +127,6 @@ dependencies {
     implementation(project(":business:playlist"))
     implementation(project(":business:channel"))
     implementation(project(":business:playlist-configuration"))
-    implementation(project(":business:extension"))
     // baselineprofile
     implementation(libs.androidx.profileinstaller)
     "baselineProfile"(project(":baselineprofile:smartphone"))
@@ -172,6 +187,18 @@ dependencies {
     implementation(libs.net.mm2d.mmupnp.mmupnp)
     implementation(libs.haze)
     implementation(libs.haze.materials)
+    implementation(libs.backdrop)
     implementation(libs.acra.notification)
     implementation(libs.acra.mail)
+
+    testImplementation(kotlin("test-junit"))
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.uiautomator.uiautomator)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4.accessibility)
+    androidTestImplementation(project(":extension:runtime"))
+    androidTestImplementation(project(":extension:transport-android"))
 }

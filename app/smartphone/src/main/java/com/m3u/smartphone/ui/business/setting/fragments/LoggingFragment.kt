@@ -17,11 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import com.m3u.core.architecture.preferences.LogLevel
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.mutablePreferenceOf
-import com.m3u.core.unit.DataUnit
-import com.m3u.core.util.basic.title
+import com.m3u.core.foundation.architecture.preferences.LogLevel
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.mutablePreferenceOf
+import com.m3u.core.foundation.unit.DataUnit
+import com.m3u.core.foundation.util.basic.title
 import com.m3u.data.service.AppLogSnapshot
 import com.m3u.i18n.R.string
 import com.m3u.smartphone.ui.material.components.Preference

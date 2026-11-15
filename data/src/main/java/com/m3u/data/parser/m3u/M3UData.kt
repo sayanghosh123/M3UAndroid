@@ -2,18 +2,9 @@ package com.m3u.data.parser.m3u
 
 import androidx.core.net.toUri
 import com.m3u.data.database.model.Channel
+import dev.oxyroid.parser.protocol.ParsedChannel
 
-internal data class M3UData(
-    val id: String = "",
-    val name: String = "",
-    val cover: String = "",
-    val group: String = "",
-    val title: String = "",
-    val url: String = "",
-    val duration: Double = -1.0,
-    val licenseType: String? = null,
-    val licenseKey: String? = null,
-)
+internal typealias M3UData = ParsedChannel
 
 internal fun M3UData.toChannel(
     playlistUrl: String,

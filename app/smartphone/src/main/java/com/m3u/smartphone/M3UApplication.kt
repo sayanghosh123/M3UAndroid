@@ -4,10 +4,16 @@ import android.app.Application
 import android.content.Context
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.m3u.core.extension.Utils
+import androidx.work.WorkManager
+import com.m3u.data.worker.ExtensionPluginBootstrapWorker
+import com.m3u.data.worker.PersistedUriPermissionCleanupWorker
+import com.m3u.data.worker.ProviderCredentialRecoveryWorker
+import com.m3u.data.worker.ProviderSessionCleanupWorker
+import com.m3u.data.worker.initializePersistedUriPermissionLeases
 import com.m3u.i18n.R.string
-import com.m3u.smartphone.cast.GoogleCastBootstrap
 import com.m3u.data.service.AppLogger
+import com.m3u.smartphone.cast.GoogleCastBootstrap
+import com.m3u.smartphone.startup.ApplicationStartupTask
 import dagger.hilt.android.HiltAndroidApp
 import org.acra.config.mailSender
 import org.acra.config.notification
@@ -25,13 +31,15 @@ class M3UApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var appLogger: AppLogger
 
+    @Inject
+    lateinit var startupTasks: Set<@JvmSuppressWildcards ApplicationStartupTask>
+
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) {
             Timber.plant(DebugTree())
         }
         Timber.plant(appLogger)
-        Utils.init(this)
         GoogleCastBootstrap.initialize(this)
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -40,6 +48,17 @@ class M3UApplication : Application(), Configuration.Provider {
             }
             previousHandler?.uncaughtException(thread, throwable)
         }
+        initializePersistedUriPermissionLeases(this)
+        val workManager = WorkManager.getInstance(this)
+        PersistedUriPermissionCleanupWorker.enqueueRecovery(
+            workManager
+        )
+        ProviderCredentialRecoveryWorker.enqueue(workManager)
+        ProviderSessionCleanupWorker.enqueue(
+            workManager = workManager,
+        )
+        ExtensionPluginBootstrapWorker.enqueue(workManager)
+        startupTasks.forEach { task -> task.enqueue(workManager) }
     }
 
     override fun attachBaseContext(base: Context?) {

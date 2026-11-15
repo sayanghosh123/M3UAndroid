@@ -6,16 +6,14 @@ on:
     paths-ignore:
       - '**.md'
       - '**.txt'
-      - '.github/**'
       - '.idea/**'
       - 'fastlane/**'
-      - '!.github/workflows/**'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref }}
+  group: android-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup JDK
         id: setup-java
@@ -42,27 +42,53 @@ jobs:
       - name: Clean GMD
         run: ./gradlew cleanManagedDevices --unused-only
 
-      - name: Build production app
-        run: ./gradlew :app:smartphone:assembleRelease
-          -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile
-          -Pandroid.testoptions.manageddevices.emulator.gpu="swiftshader_indirect"
-          -Pandroid.experimental.testOptions.managedDevices.emulator.showKernelLogging=true
-          -Pandroid.experimental.androidTest.numManagedDeviceShards=1
-          -Pandroid.experimental.testOptions.managedDevices.maxConcurrentDevices=1
+      - name: Verify extension contracts
+        run: |
+          ./gradlew \
+            :extension:api:jvmTest \
+            :extension:runtime:test \
+            :extension:sdk-android:testDebugUnitTest \
+            :extension:transport-android:testDebugUnitTest
 
-#      - name: Build production tv app
-#        run: ./gradlew :app:tv:assembleRelease
+      - name: Verify localization contracts
+        run: ./gradlew :i18n:testDebugUnitTest
+
+      - name: Validate connected UI harnesses
+        run: |
+          bash -n testing/bin/run-smartphone-provider-ui-matrix.sh
+          ./gradlew \
+            :data:assembleDebugAndroidTest \
+            :app:smartphone:assembleDebugAndroidTest \
+            :app:tv:assembleDebugAndroidTest
+
+      - name: Build smartphone release APK
+        run: ./gradlew :app:smartphone:assembleRelease
+
+      - name: Build TV release APK
+        run: ./gradlew :app:tv:assembleRelease
+
+      - name: Build reference extension release APK
+        run: ./gradlew :testing:extension-reference:assembleRelease
+
+      - name: Verify 16 KB native compatibility
+        run: |
+          testing/bin/verify-android-16kb.sh \
+            app/smartphone/build/outputs/published-apk/release/*.apk \
+            app/tv/build/outputs/published-apk/release/*.apk \
+            testing/extension-reference/build/outputs/apk/release/*.apk
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
+          if-no-files-found: error
           path: |
-            app/smartphone/build/outputs/apk/release/*.apk
-#            app/tv/build/outputs/apk/release/*.apk
+            app/smartphone/build/outputs/published-apk/release/*.apk
+            app/tv/build/outputs/published-apk/release/*.apk
+            testing/extension-reference/build/outputs/apk/release/*.apk
 
       - name: Upload To Telegram
         if: github.event_name != 'pull_request'
-        uses: xireiki/channel-post@v1.0.10
+        uses: xireiki/channel-post@890c1d09635ae629aeffbed4f9716a5473eac896 # v1.0.10
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           chat_id: ${{ secrets.CHAT_ID }}
@@ -71,5 +97,6 @@ jobs:
           large_file: true
           method: sendFile
           path: |
-            app/smartphone/build/outputs/apk/release/*.apk
-#            app/tv/build/outputs/apk/release/*.apk
+            app/smartphone/build/outputs/published-apk/release/*.apk
+            app/tv/build/outputs/published-apk/release/*.apk
+            testing/extension-reference/build/outputs/apk/release/*.apk

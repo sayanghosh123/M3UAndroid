@@ -83,13 +83,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.media3.common.Player
 import com.m3u.business.channel.PlayerState
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.preferenceOf
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.preferenceOf
 import com.m3u.core.foundation.suggest.any
 import com.m3u.core.foundation.suggest.suggestAll
 import com.m3u.core.foundation.ui.composableOf
 import com.m3u.core.foundation.ui.thenIf
-import com.m3u.core.util.basic.isNotEmpty
+import com.m3u.core.foundation.util.basic.isNotEmpty
 import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.i18n.R.string
 import com.m3u.smartphone.ui.business.channel.components.Paddings
@@ -124,6 +124,7 @@ fun ChannelMask(
     maskState: MaskState,
     favourite: Boolean,
     isSeriesPlaylist: Boolean,
+    supportsDirectSharing: Boolean,
     isPanelExpanded: Boolean,
     useVertical: Boolean,
     hasTrack: Boolean,
@@ -319,17 +320,21 @@ fun ChannelMask(
                     )
                 }
 
-                if (!currentUseVertical) {
-                    MaskButton(
-                        state = maskState,
-                        icon = if (currentIsPanelExpanded) Icons.Rounded.Archive
-                        else Icons.Rounded.Unarchive,
-                        onClick = openOrClosePanel,
-                        contentDescription = stringResource(string.feat_channel_tooltip_open_panel)
+                MaskButton(
+                    state = maskState,
+                    icon = if (currentIsPanelExpanded) Icons.Rounded.Archive
+                    else Icons.Rounded.Unarchive,
+                    onClick = openOrClosePanel,
+                    contentDescription = stringResource(
+                        if (currentIsPanelExpanded) {
+                            string.ui_action_close_player_panel
+                        } else {
+                            string.ui_action_open_player_panel
+                        }
                     )
-                }
+                )
 
-                if (screencast) {
+                if (screencast && supportsDirectSharing) {
                     MaskButton(
                         state = maskState,
                         icon = Icons.Rounded.Cast,
@@ -354,7 +359,7 @@ fun ChannelMask(
                     alwaysShowReplay,
                     playerState.playerError
                 )
-                Box(Modifier.size(36.dp)) {
+                Box(Modifier.size(48.dp)) {
                     androidx.compose.animation.AnimatedVisibility(
                         visible = !currentIsPanelExpanded && adjacentChannels?.prevId != null,
                         enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it / 6 }),
@@ -369,7 +374,7 @@ fun ChannelMask(
                     }
                 }
 
-                Box(Modifier.size(52.dp)) {
+                Box(Modifier.size(64.dp)) {
                     androidx.compose.animation.AnimatedVisibility(
                         visible = !currentIsPanelExpanded && centerRole != MaskCenterRole.Loading,
                         enter = fadeIn(),
@@ -385,7 +390,7 @@ fun ChannelMask(
                         )
                     }
                 }
-                Box(Modifier.size(36.dp)) {
+                Box(Modifier.size(48.dp)) {
                     androidx.compose.animation.AnimatedVisibility(
                         visible = !currentIsPanelExpanded && adjacentChannels?.nextId != null,
                         enter = fadeIn() + slideInHorizontally(initialOffsetX = { it / 6 }),
@@ -443,7 +448,7 @@ fun ChannelMask(
                     )
                     Column(Modifier.alpha(alpha)) {
                         Text(
-                            text = playlistTitle.trim().uppercase(),
+                            text = playlistTitle.trim(),
                             style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.54f),
@@ -470,7 +475,7 @@ fun ChannelMask(
                     }
                     if (playStateDisplayText.isNotEmpty()) {
                         Text(
-                            text = playStateDisplayText.uppercase(),
+                            text = playStateDisplayText,
                             style = MaterialTheme.typography.bodyMedium,
                             color = LocalContentColor.current.copy(alpha = 0.75f),
                             maxLines = 1,
@@ -673,6 +678,14 @@ private fun MaskCenterButton(
                 MaskCenterRole.Pause -> Icons.Rounded.Pause
                 else -> Icons.Rounded.Refresh
             },
+            contentDescription = stringResource(
+                when (centerRole) {
+                    MaskCenterRole.Replay -> string.ui_action_retry
+                    MaskCenterRole.Play -> string.ui_action_play
+                    MaskCenterRole.Pause -> string.ui_action_pause
+                    MaskCenterRole.Loading -> string.ui_state_loading
+                }
+            ),
             onClick = when (centerRole) {
                 MaskCenterRole.Replay -> onRetry
                 MaskCenterRole.Play -> onPlay
@@ -680,7 +693,8 @@ private fun MaskCenterButton(
                 else -> {
                     {}
                 }
-            }
+            },
+            enabled = centerRole != MaskCenterRole.Loading,
         )
     }
 }
@@ -712,8 +726,15 @@ private fun MaskNavigateButton(
                 MaskNavigateRole.Next -> Icons.Rounded.SkipNext
                 MaskNavigateRole.Previous -> Icons.Rounded.SkipPrevious
             },
+            contentDescription = stringResource(
+                when (navigateRole) {
+                    MaskNavigateRole.Next -> string.ui_action_next_channel
+                    MaskNavigateRole.Previous -> string.ui_action_previous_channel
+                }
+            ),
             interactionSource = interactionSource,
             onClick = onClick,
+            enabled = enabled,
             modifier = Modifier
                 .thenIf(!enabled) { Modifier.alpha(0f) }
                 .graphicsLayer {

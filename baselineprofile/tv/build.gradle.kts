@@ -3,14 +3,13 @@
 import com.android.build.api.dsl.ManagedVirtualDevice
 
 plugins {
-    alias(libs.plugins.org.jetbrains.kotlin.android)
     alias(libs.plugins.androidx.baselineprofile)
     alias(libs.plugins.com.android.test)
 }
 
 android {
     namespace = "com.m3u.baselineprofile.tv"
-    compileSdk = 36
+    compileSdk = 37
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -40,7 +39,7 @@ android {
 baselineProfile {
     managedDevices += "tvApi34"
     useConnectedDevices = false
-    enableEmulatorDisplay = true
+    enableEmulatorDisplay = System.getenv("CI") != "true"
 }
 
 androidComponents {

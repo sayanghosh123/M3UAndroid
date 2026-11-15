@@ -13,17 +13,17 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.m3u.core.Contracts
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.Settings
-import com.m3u.core.architecture.preferences.flowOf
-import com.m3u.core.wrapper.Resource
-import com.m3u.core.wrapper.Sort
-import com.m3u.core.wrapper.mapResource
-import com.m3u.core.wrapper.resource
+import com.m3u.core.foundation.Contracts
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.Settings
+import com.m3u.core.foundation.architecture.preferences.flowOf
+import com.m3u.core.foundation.wrapper.Resource
+import com.m3u.core.foundation.wrapper.Sort
+import com.m3u.core.foundation.wrapper.mapResource
+import com.m3u.core.foundation.wrapper.resource
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
-import com.m3u.data.parser.xtream.XtreamChannelInfo
+import com.m3u.data.parser.xtream.XtreamEpisodeInfo
 import com.m3u.data.repository.channel.ChannelRepository
 import com.m3u.data.repository.media.MediaRepository
 import com.m3u.data.repository.playlist.PlaylistRepository
@@ -128,7 +128,7 @@ class FavoriteViewModel @Inject constructor(
 
     val series = MutableStateFlow<Channel?>(null)
     val seriesReplay = MutableStateFlow(0)
-    val episodes: StateFlow<Resource<List<XtreamChannelInfo.Episode>>> = series
+    val episodes: StateFlow<Resource<List<XtreamEpisodeInfo>>> = series
         .combine(seriesReplay) { series, _ -> series }
         .flatMapLatest { series ->
             if (series == null) flow { }

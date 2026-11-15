@@ -1,15 +1,17 @@
 plugins {
     alias(libs.plugins.com.android.application)
-    alias(libs.plugins.org.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.com.google.dagger.hilt.android)
     alias(libs.plugins.com.google.devtools.ksp)
     alias(libs.plugins.androidx.baselineprofile)
     id("kotlin-parcelize")
 }
+
+val m3uMockServerUrl = providers.gradleProperty("m3uMockServerUrl").orElse("http://10.0.2.2:8080")
+
 android {
     namespace = "com.m3u.tv"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.m3u.tv"
         minSdk = 26
@@ -18,8 +20,12 @@ android {
         versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["m3uMockServerUrl"] = m3uMockServerUrl.get()
     }
     buildTypes {
+        debug {
+            isPseudoLocalesEnabled = true
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -33,7 +39,6 @@ android {
             )
         }
     }
-    aaptOptions.cruncherEnabled = false
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -45,13 +50,15 @@ android {
     packaging {
         resources.excludes += "META-INF/**"
     }
-    applicationVariants.all {
-        outputs
-            .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
-            .forEach { output ->
-                output.outputFileName = "tv-${versionName}.apk"
-            }
-    }
+}
+
+tasks.matching { task ->
+    task.name.startsWith("connected") && task.name.endsWith("AndroidTest")
+}.configureEach {
+    dependsOn(":testing:mock-server:startMockServer")
+    dependsOn(":testing:extension-reference:installDebug")
+    finalizedBy(":testing:mock-server:stopMockServer")
+    finalizedBy(":testing:extension-reference:uninstallDebug")
 }
 
 hilt {
@@ -61,12 +68,13 @@ hilt {
 baselineProfile {
     dexLayoutOptimization = true
     saveInSrc = true
+    mergeIntoMain = true
 }
 
 dependencies {
-    implementation(project(":core"))
     implementation(project(":core:foundation"))
     implementation(project(":data"))
+    implementation(project(":extension:api"))
     // business
     implementation(project(":business:foryou"))
     implementation(project(":business:favorite"))
@@ -108,8 +116,6 @@ dependencies {
     api(libs.androidx.tv.material)
     // accompanist
     implementation(libs.google.accompanist.permissions)
-    // performance
-    debugImplementation(libs.squareup.leakcanary)
     // other
     implementation(libs.androidx.graphics.shapes)
     implementation(libs.androidx.constraintlayout.compose)
@@ -119,8 +125,15 @@ dependencies {
     implementation(libs.androidx.media3.ui.compose)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.airbnb.lottie.compose)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.minabox)
     implementation(libs.net.mm2d.mmupnp.mmupnp)
     implementation(libs.haze)
     implementation(libs.haze.materials)
+
+    testImplementation(kotlin("test-junit"))
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.uiautomator.uiautomator)
 }

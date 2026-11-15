@@ -5,20 +5,21 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkQuery
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.Settings
-import com.m3u.core.architecture.preferences.flowOf
-import com.m3u.core.wrapper.Resource
-import com.m3u.core.wrapper.mapResource
-import com.m3u.core.wrapper.resource
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.Settings
+import com.m3u.core.foundation.architecture.preferences.flowOf
+import com.m3u.core.foundation.wrapper.Resource
+import com.m3u.core.foundation.wrapper.mapResource
+import com.m3u.core.foundation.wrapper.resource
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
-import com.m3u.data.parser.xtream.XtreamChannelInfo
+import com.m3u.data.parser.xtream.XtreamEpisodeInfo
 import com.m3u.data.repository.channel.ChannelRepository
 import com.m3u.data.repository.playlist.PlaylistRepository
 import com.m3u.data.repository.programme.ProgrammeRepository
 import com.m3u.data.service.PlayerManager
 import com.m3u.data.worker.SubscriptionWorker
+import com.m3u.data.worker.playlistWorkTag
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -61,10 +62,19 @@ class ForyouViewModel @Inject constructor(
                 WorkInfo.State.ENQUEUED,
             )
         )
-            .combine(playlistRepository.observePlaylistUrls()) { infos, playlistUrls ->
+            .combine(playlistRepository.observeAll()) { infos, playlists ->
+                val urlByWorkTag = playlists.associate { playlist ->
+                    playlistWorkTag(playlist.url) to playlist.url
+                }
+                val playlistUrls = playlists.mapTo(mutableSetOf(), Playlist::url)
                 infos
                     .filter { info -> SubscriptionWorker.TAG in info.tags }
-                    .mapNotNull { info -> info.tags.find { it in playlistUrls } }
+                    .mapNotNull { info ->
+                        info.tags.firstNotNullOfOrNull(urlByWorkTag::get)
+                            // Compatibility with work enqueued before hashed tags shipped.
+                            ?: info.tags.firstOrNull { tag -> tag in playlistUrls }
+                    }
+                    .distinct()
             }
             .stateIn(
                 scope = viewModelScope,
@@ -106,7 +116,7 @@ class ForyouViewModel @Inject constructor(
 
     val series = MutableStateFlow<Channel?>(null)
     val seriesReplay = MutableStateFlow(0)
-    val episodes: StateFlow<Resource<List<XtreamChannelInfo.Episode>>> = series
+    val episodes: StateFlow<Resource<List<XtreamEpisodeInfo>>> = series
         .combine(seriesReplay) { series, _ -> series }
         .flatMapLatest { series ->
             if (series == null) flow { }

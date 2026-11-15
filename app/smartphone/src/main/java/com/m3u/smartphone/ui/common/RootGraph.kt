@@ -9,13 +9,12 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.m3u.data.database.model.Playlist
-import com.m3u.smartphone.ui.business.extension.ExtensionRoute
-import com.m3u.smartphone.ui.material.ktx.Edge
-import com.m3u.smartphone.ui.material.ktx.blurEdge
 import com.m3u.smartphone.ui.business.favourite.FavoriteRoute
 import com.m3u.smartphone.ui.business.foryou.ForyouRoute
 import com.m3u.smartphone.ui.business.setting.SettingRoute
 import com.m3u.smartphone.ui.material.components.Destination
+import com.m3u.smartphone.ui.material.ktx.Edge
+import com.m3u.smartphone.ui.material.ktx.blurEdge
 
 fun NavGraphBuilder.rootGraph(
     contentPadding: PaddingValues,
@@ -23,6 +22,8 @@ fun NavGraphBuilder.rootGraph(
     navigateToChannel: () -> Unit,
     navigateToSettingPlaylistManagement: () -> Unit,
     navigateToPlaylistConfiguration: (Playlist) -> Unit,
+    showBottomEdgeBlur: Boolean,
+    onNestedDetailVisibilityChanged: (Boolean) -> Unit,
 ) {
     composable(
         route = Destination.Foryou.name,
@@ -37,10 +38,16 @@ fun NavGraphBuilder.rootGraph(
             contentPadding = contentPadding,
             modifier = Modifier
                 .fillMaxSize()
-                .blurEdge(
-                    edge = Edge.Bottom,
-                    color = MaterialTheme.colorScheme.background
-                )
+                .then(
+                    if (showBottomEdgeBlur) {
+                        Modifier.blurEdge(
+                            edge = Edge.Bottom,
+                            color = MaterialTheme.colorScheme.background,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
     composable(
@@ -53,26 +60,16 @@ fun NavGraphBuilder.rootGraph(
             contentPadding = contentPadding,
             modifier = Modifier
                 .fillMaxSize()
-                .blurEdge(
-                    edge = Edge.Bottom,
-                    color = MaterialTheme.colorScheme.background
-                )
-        )
-    }
-
-    composable(
-        route = Destination.Extension.name,
-        enterTransition = { fadeIn() },
-        exitTransition = { fadeOut() }
-    ) {
-        ExtensionRoute(
-            contentPadding = contentPadding,
-            modifier = Modifier
-                .fillMaxSize()
-                .blurEdge(
-                    edge = Edge.Bottom,
-                    color = MaterialTheme.colorScheme.background
-                )
+                .then(
+                    if (showBottomEdgeBlur) {
+                        Modifier.blurEdge(
+                            edge = Edge.Bottom,
+                            color = MaterialTheme.colorScheme.background,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
 
@@ -83,12 +80,19 @@ fun NavGraphBuilder.rootGraph(
     ) {
         SettingRoute(
             contentPadding = contentPadding,
+            onDetailVisibilityChanged = onNestedDetailVisibilityChanged,
             modifier = Modifier
                 .fillMaxSize()
-                .blurEdge(
-                    edge = Edge.Bottom,
-                    color = MaterialTheme.colorScheme.background
-                )
+                .then(
+                    if (showBottomEdgeBlur) {
+                        Modifier.blurEdge(
+                            edge = Edge.Bottom,
+                            color = MaterialTheme.colorScheme.background,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
 }

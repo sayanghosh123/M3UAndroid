@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import com.m3u.core.wrapper.Sort
+import com.m3u.core.foundation.wrapper.Sort
 import com.m3u.i18n.R.string
 import com.m3u.smartphone.ui.material.model.LocalSpacing
 
@@ -39,7 +39,7 @@ fun SortBottomSheet(
         header = {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.Sort,
-                contentDescription = "sort"
+                contentDescription = null
             )
             Text(
                 text = stringResource(string.ui_sort),

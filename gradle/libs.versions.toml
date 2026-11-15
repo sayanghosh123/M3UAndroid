@@ -4,7 +4,7 @@ androidx-core-splashscreen = "1.2.0"
 androidx-appcompat = "1.7.1"
 androidx-activity = "1.12.3"
 androidx-lifecycle = "2.10.0"
-androidx-compose-bom = "2026.01.01"
+androidx-compose-bom = "2026.06.01"
 androidx-compose-material3-adaptive = "1.2.0"
 androidx-constraintlayout-compose = "1.1.1"
 androidx-navigation = "2.9.7"
@@ -20,36 +20,42 @@ auto-annotations = "1.1.1"
 auto-ksp = "1.2.0"
 glance = "1.1.1"
 google-accompanist = "0.37.3"
-google-dagger = "2.58" # 2.59 requires AGP9+
+google-dagger = "2.59.2"
 google-cast-framework = "22.3.0"
 
-haze = "1.7.1"
+haze = "1.7.2"
+backdrop = "2.0.0"
 io-coil = "2.7.0"
 kotlinpoet = "2.2.0"
 kotlinx-serialization-json = "1.10.0"
 kotlinx-serialization-converter-retrofit = "1.0.0"
 kotlinx-datetime = "0.7.1"
+kotlinx-coroutines = "1.10.2"
 
 chucker = "4.3.0"
 logback = "3.0.0"
 lottie-compose = "6.7.1"
-m3u-extension = "1.9"
-nextLib = "0.8.5"
+nextLib = "1.9.1-0.10.1"
+rtmpClientPage16k = "16647b19d51a08625d9ed32bf6aa31734747c4a9"
 slf4j-api = "2.0.17"
+snakeyaml = "2.3"
 
 squareup-retrofit2 = "3.0.0"
+squareup-okhttp = "5.3.2"
 squareup-leakcanary = "2.14"
 squareup-wire = "5.5.0"
 
-kotlin = "2.3.0"
-android-gradle-plugin = "8.9.3"
-kotlin-symbol-processor = "2.3.5"
+kotlin = "2.4.10"
+android-gradle-plugin = "9.1.1"
+kotlin-symbol-processor = "2.3.10"
 
 androidx-test-ext-junit = "1.3.0"
+androidx-test-core = "1.7.0"
+androidx-test-runner = "1.7.0"
 espresso-core = "3.7.0"
 com-google-android-material = "1.13.0"
 androidx-test-uiautomator = "2.3.0"
-androidx-benchmark = "1.4.1"
+androidx-benchmark = "1.5.0-alpha07"
 androidx-graphics-shapes = "1.1.0"
 
 minabox = "1.10.0"
@@ -78,6 +84,8 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-ui-test-junit4-accessibility = { group = "androidx.compose.ui", name = "ui-test-junit4-accessibility" }
 androidx-compose-ui-util = { group = "androidx.compose.ui", name = "ui-util" }
 
 androidx-compose-material3-window-size-clazz = { group = "androidx.compose.material3", name = "material3-window-size-class" }
@@ -126,6 +134,7 @@ androidx-room-runtime = { group = "androidx.room", name = "room-runtime", versio
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "androidx-room" }
 androidx-room-paging = { group = "androidx.room", name = "room-paging", version.ref = "androidx-room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "androidx-room" }
+androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "androidx-room" }
 
 auto-service-annotations = { module = "com.google.auto.service:auto-service-annotations", version.ref = "auto-annotations" }
 auto-service-ksp = { module = "dev.zacsweers.autoservice:auto-service-ksp", version.ref = "auto-ksp" }
@@ -141,10 +150,8 @@ androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", v
 
 kotlinpoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinpoet" }
 kotlinpoet-ksp = { module = "com.squareup:kotlinpoet-ksp", version.ref = "kotlinpoet" }
-m3u-extension-api = { module = "com.github.oxyroid.m3u-extension:api", version.ref = "m3u-extension" }
-m3u-extension-annotation = { module = "com.github.oxyroid.m3u-extension:annotation", version.ref = "m3u-extension" }
-m3u-extension-processor = { module = "com.github.oxyroid.m3u-extension:processor", version.ref = "m3u-extension" }
 squareup-retrofit2 = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "squareup-retrofit2" }
+squareup-okhttp3-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "squareup-okhttp" }
 squareup-leakcanary = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "squareup-leakcanary" }
 
 ktor-server-netty = { group = "io.ktor", name = "ktor-server-netty", version.ref = "ktor-server" }
@@ -154,18 +161,22 @@ ktor-server-content-negotiation = { group = "io.ktor", name = "ktor-server-conte
 ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor-server" }
 
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-coverter-retrofit = { group = "com.jakewharton.retrofit", name = "retrofit2-kotlinx-serialization-converter", version.ref = "kotlinx-serialization-converter-retrofit" }
 
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
 
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = "haze" }
+backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
 io-coil-kt = { group = "io.coil-kt", name = "coil", version.ref = "io-coil" }
 io-coil-kt-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "io-coil" }
 
 airbnb-lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie-compose" }
 
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext-junit" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidx-test-core" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidx-test-runner" }
 androidx-test-espresso-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso-core" }
 androidx-test-uiautomator-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "androidx-test-uiautomator" }
 androidx-benchmark-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "androidx-benchmark" }
@@ -173,10 +184,12 @@ androidx-benchmark-benchmark-macro-junit4 = { group = "androidx.benchmark", name
 chucker = { module = "com.github.chuckerteam.chucker:library", version.ref = "chucker" }
 chucker-no-op = { module = "com.github.chuckerteam.chucker:library-no-op", version.ref = "chucker" }
 logback-android = { module = "com.github.tony19:logback-android", version.ref = "logback" }
-nextlib-media3ext = { module = "com.github.sintrs.nextlib:nextlib-media3ext", version.ref = "nextLib" }
-nextlib-mediainfo = { module = "com.github.sintrs.nextlib:nextlib-mediainfo", version.ref = "nextLib" }
+nextlib-media3ext = { module = "io.github.anilbeesetti:nextlib-media3ext", version.ref = "nextLib" }
+nextlib-mediainfo = { module = "io.github.anilbeesetti:nextlib-mediainfo", version.ref = "nextLib" }
+rtmp-client-page16k = { module = "com.github.anenasa:LibRtmp-Client-for-Android", version.ref = "rtmpClientPage16k" }
 
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j-api" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 
 minabox = { group = "io.github.oleksandrbalan", name = "minabox", version.ref = "minabox" }
 net-mm2d-mmupnp-mmupnp = { group = "net.mm2d.mmupnp", name = "mmupnp", version.ref = "mm2d-mmupnp" }
@@ -194,7 +207,7 @@ com-android-application = { id = "com.android.application", version.ref = "andro
 com-android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
 com-android-test = { id = "com.android.test", version.ref = "android-gradle-plugin" }
 org-jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+org-jetbrains-kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 org-jetbrains-kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "androidx-benchmark" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

@@ -11,7 +11,9 @@ import com.m3u.data.database.dao.ColorSchemeDao
 import com.m3u.data.database.dao.EpisodeDao
 import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.dao.ProgrammeDao
+import com.m3u.data.database.dao.ProviderDao
 import com.m3u.data.database.example.ColorSchemeExample
+import com.m3u.data.extension.security.CredentialVault
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +27,8 @@ internal object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        credentialVault: CredentialVault,
     ): M3UDatabase = Room.databaseBuilder(
         context,
         M3UDatabase::class.java,
@@ -44,6 +47,9 @@ internal object DatabaseModule {
         .addMigrations(DatabaseMigrations.MIGRATION_2_3)
         .addMigrations(DatabaseMigrations.MIGRATION_7_8)
         .addMigrations(DatabaseMigrations.MIGRATION_10_11)
+        .addMigrations(DatabaseMigrations.migration22To23(credentialVault))
+        .addMigrations(DatabaseMigrations.MIGRATION_24_25)
+        .addMigrations(DatabaseMigrations.MIGRATION_25_26)
         .build()
 
     @Provides
@@ -75,4 +81,10 @@ internal object DatabaseModule {
     fun provideColorSchemeDao(
         database: M3UDatabase
     ): ColorSchemeDao = database.colorSchemeDao()
+
+    @Provides
+    @Singleton
+    fun provideProviderDao(
+        database: M3UDatabase
+    ): ProviderDao = database.providerDao()
 }

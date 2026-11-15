@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.com.android.library)
-    alias(libs.plugins.org.jetbrains.kotlin.android)
 }
 
 android {
@@ -10,4 +9,5 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    testImplementation(kotlin("test-junit"))
 }

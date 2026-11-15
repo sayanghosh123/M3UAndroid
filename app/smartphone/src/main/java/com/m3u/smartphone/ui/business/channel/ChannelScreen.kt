@@ -51,10 +51,10 @@ import com.google.android.gms.cast.framework.CastButtonFactory
 import com.google.accompanist.permissions.rememberPermissionState
 import com.m3u.business.channel.ChannelViewModel
 import com.m3u.business.channel.PlayerState
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.preferenceOf
-import com.m3u.core.util.basic.isNotEmpty
-import com.m3u.core.util.basic.title
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.preferenceOf
+import com.m3u.core.foundation.util.basic.isNotEmpty
+import com.m3u.core.foundation.util.basic.title
 import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
@@ -106,7 +106,7 @@ fun ChannelRoute(
     val channel by viewModel.channel.collectAsStateWithLifecycle()
     val adjacentChannels by viewModel.adjacentChannels.collectAsStateWithLifecycle()
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
-    val devices = viewModel.devices
+    val devices by viewModel.devices.collectAsStateWithLifecycle()
     val isDevicesVisible by viewModel.isDevicesVisible.collectAsStateWithLifecycle()
     val searching by viewModel.searching.collectAsStateWithLifecycle()
     val castState by googleCastViewModel.castState.collectAsStateWithLifecycle()
@@ -119,6 +119,7 @@ fun ChannelRoute(
     val isProgrammeSupported by viewModel.isProgrammeSupported.collectAsStateWithLifecycle(
         initialValue = false
     )
+    val supportsDirectSharing = channel?.url?.let { url -> url != Channel.URL_DYNAMIC } == true
 
     val channels = viewModel.pagingChannels.collectAsLazyPagingItems()
     val programmes = viewModel.programmes.collectAsLazyPagingItems()
@@ -307,6 +308,7 @@ fun ChannelRoute(
                 playlist = playlist,
                 adjacentChannels = adjacentChannels,
                 channel = channel,
+                supportsDirectSharing = supportsDirectSharing,
                 hasTrack = tracks.isNotEmpty(),
                 isPanelExpanded = isPanelExpanded,
                 brightness = brightness,
@@ -348,7 +350,7 @@ fun ChannelRoute(
     DlnaDevicesBottomSheet(
         maskState = maskState,
         searching = searching,
-        isDevicesVisible = isDevicesVisible,
+        isDevicesVisible = isDevicesVisible && supportsDirectSharing,
         devices = devices,
         isGoogleCastAvailable = castState.isAvailable,
         connectedGoogleCastDeviceName = castState.deviceName.takeIf { castState.isConnected },
@@ -359,7 +361,10 @@ fun ChannelRoute(
             googleCastViewModel.openGoogleCastDevices(launcher)
         },
         openInExternalPlayer = {
-            val channelUrl = channel?.url ?: return@DlnaDevicesBottomSheet
+            val channelUrl = channel
+                ?.url
+                ?.takeUnless { url -> url == Channel.URL_DYNAMIC }
+                ?: return@DlnaDevicesBottomSheet
             context.startActivity(
                 Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(channelUrl.toUri(), "video/*")
@@ -371,12 +376,12 @@ fun ChannelRoute(
 
     FormatsBottomSheet(
         visible = choosing,
-        formats = tracks,
-        selectedFormats = selectedFormats,
+        tracks = tracks,
+        selectedTracks = selectedFormats,
         maskState = maskState,
         onDismiss = { choosing = false },
-        onChooseTrack = { type, format ->
-            viewModel.chooseTrack(type, format)
+        onChooseTrack = { track ->
+            viewModel.chooseTrack(track)
         },
         onClearTrack = { type ->
             viewModel.clearTrack(type)
@@ -406,6 +411,7 @@ private fun ChannelPlayer(
     playerState: PlayerState,
     playlist: Playlist?,
     channel: Channel?,
+    supportsDirectSharing: Boolean,
     adjacentChannels: AdjacentChannels?,
     isSeriesPlaylist: Boolean,
     hasTrack: Boolean,
@@ -509,6 +515,7 @@ private fun ChannelPlayer(
             maskState = maskState,
             favourite = favourite,
             isSeriesPlaylist = isSeriesPlaylist,
+            supportsDirectSharing = supportsDirectSharing,
             useVertical = useVertical,
             hasTrack = hasTrack,
             cwPosition = cwPosition,

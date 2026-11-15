@@ -6,8 +6,9 @@ import com.m3u.data.database.model.DataSource
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.database.model.PlaylistWithChannels
 import com.m3u.data.database.model.Channel
-import com.m3u.data.parser.xtream.XtreamChannelInfo
+import com.m3u.data.parser.xtream.XtreamEpisodeInfo
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
 
 interface PlaylistRepository {
     fun observeAll(): Flow<List<Playlist>>
@@ -40,7 +41,18 @@ interface PlaylistRepository {
 
     suspend fun insertEpgAsPlaylist(title: String, epg: String)
 
-    suspend fun refresh(url: String)
+    suspend fun refresh(
+        url: String,
+        reason: PlaylistRefreshReason = PlaylistRefreshReason.USER,
+    )
+
+    suspend fun refreshWithWorkId(
+        url: String,
+        reason: PlaylistRefreshReason = PlaylistRefreshReason.USER,
+    ): UUID? {
+        refresh(url, reason)
+        return null
+    }
 
     suspend fun unsubscribe(url: String): Playlist?
 
@@ -58,9 +70,7 @@ interface PlaylistRepository {
 
     fun observeAllCounts(): Flow<Map<Playlist, Int>>
 
-    suspend fun readSeriesInfoOrThrow(series: Channel): XtreamChannelInfo
-
-    suspend fun readEpisodesOrThrow(series: Channel): List<XtreamChannelInfo.Episode>
+    suspend fun readEpisodesOrThrow(series: Channel): List<XtreamEpisodeInfo>
 
     suspend fun deleteEpgPlaylistAndProgrammes(epgUrl: String)
 
@@ -79,4 +89,9 @@ interface PlaylistRepository {
             val epgUrl: String
         ): EpgPlaylistUseCase
     }
+}
+
+enum class PlaylistRefreshReason {
+    USER,
+    BACKGROUND,
 }

@@ -4,11 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
-import com.m3u.core.architecture.Publisher
-import com.m3u.core.architecture.preferences.LogLevel
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.Settings
-import com.m3u.core.architecture.preferences.flowOf
+import com.m3u.core.foundation.architecture.Publisher
+import com.m3u.core.foundation.architecture.preferences.LogLevel
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.Settings
+import com.m3u.core.foundation.architecture.preferences.flowOf
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

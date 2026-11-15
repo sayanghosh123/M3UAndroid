@@ -2,7 +2,7 @@ package com.m3u.data.repository.channel
 
 import androidx.paging.PagingData
 import androidx.paging.PagingSource
-import com.m3u.core.wrapper.Sort
+import com.m3u.core.foundation.wrapper.Sort
 import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.data.database.model.Channel
 import kotlinx.coroutines.flow.Flow
@@ -12,6 +12,7 @@ interface ChannelRepository {
     fun observe(id: Int): Flow<Channel?>
 
     fun observeAllByPlaylistUrl(playlistUrl: String): Flow<List<Channel>>
+    fun observeRelationIdsByPlaylistUrl(playlistUrl: String): Flow<List<String>>
     fun pagingAll(query: String): PagingSource<Int, Channel>
     fun pagingAllByPlaylistUrl(
         url: String,
@@ -28,6 +29,7 @@ interface ChannelRepository {
     ): Flow<AdjacentChannels>
 
     suspend fun getByPlaylistUrl(playlistUrl: String): List<Channel>
+    suspend fun getByRelationIds(relationIds: List<String>): List<Channel>
     suspend fun favouriteOrUnfavourite(id: Int)
     suspend fun hide(id: Int, target: Boolean)
     suspend fun reportPlayed(id: Int)

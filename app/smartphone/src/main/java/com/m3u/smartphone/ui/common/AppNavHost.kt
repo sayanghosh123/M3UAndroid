@@ -15,9 +15,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import com.m3u.business.playlist.configuration.navigateToPlaylistConfiguration
 import com.m3u.business.playlist.navigateToPlaylist
-import com.m3u.core.architecture.preferences.PreferencesKeys
-import com.m3u.core.architecture.preferences.preferenceOf
-import com.m3u.core.wrapper.eventOf
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.preferenceOf
+import com.m3u.core.foundation.wrapper.eventOf
 import com.m3u.smartphone.ui.business.channel.PlayerActivity
 import com.m3u.smartphone.ui.business.configuration.playlistConfigurationScreen
 import com.m3u.smartphone.ui.business.playlist.playlistScreen
@@ -32,6 +32,8 @@ fun AppNavHost(
     navigateToChannel: () -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
+    showBottomEdgeBlur: Boolean = true,
+    onNestedDetailVisibilityChanged: (Boolean) -> Unit = {},
     startDestination: String = Destination.Foryou.name
 ) {
     val context = LocalContext.current
@@ -57,7 +59,9 @@ fun AppNavHost(
             },
             navigateToPlaylistConfiguration = {
                 navController.navigateToPlaylistConfiguration(it.url)
-            }
+            },
+            showBottomEdgeBlur = showBottomEdgeBlur,
+            onNestedDetailVisibilityChanged = onNestedDetailVisibilityChanged,
         )
         playlistScreen(
             navigateToChannel = {
@@ -76,6 +80,14 @@ fun AppNavHost(
             },
             contentPadding = contentPadding
         )
-        playlistConfigurationScreen(contentPadding)
+        playlistConfigurationScreen(
+            contentPadding = contentPadding,
+            onBack = {
+                navController.popBackStack()
+            },
+            onPlaylistRemoved = {
+                navController.popBackStack()
+            },
+        )
     }
 }
