@@ -13,6 +13,7 @@ import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.dao.ProgrammeDao
 import com.m3u.data.database.model.Programme
 import com.m3u.data.database.model.ProgrammeRange
+import com.m3u.data.database.model.ProgrammeSearchResult
 import com.m3u.data.database.model.epgUrlsOrXtreamXmlUrl
 import com.m3u.data.parser.epg.EpgParser
 import com.m3u.data.parser.epg.EpgProgramme
@@ -69,6 +70,33 @@ internal class ProgrammeRepositoryImpl @Inject constructor(
         .map { epgUrls -> findValidEpgUrl(epgUrls, relationId, defaultProgrammeRange) }
         .flatMapLatest { epgUrl ->
             Pager(PagingConfig(15)) { programmeDao.pagingProgrammes(epgUrl, relationId) }.flow
+        }
+
+    override fun searchAll(
+        query: String,
+        category: String?,
+    ): Flow<PagingData<ProgrammeSearchResult>> =
+        Pager(PagingConfig(pageSize = 30)) {
+            programmeDao.searchAll(query.trim(), category?.trim()?.takeIf(String::isNotEmpty))
+        }.flow
+
+    override fun observeSports(
+        windowStart: Long,
+        windowEnd: Long,
+    ): Flow<List<ProgrammeSearchResult>> =
+        programmeDao.observeAllInWindow(windowStart, windowEnd).map { programmes ->
+            programmes.filter { result ->
+                val searchable = buildString {
+                    append(result.programme.title)
+                    append(' ')
+                    append(result.programme.description)
+                    append(' ')
+                    append(result.programme.categories.joinToString())
+                }
+                ProgrammeRepository.SPORTS_KEYWORDS.any {
+                    searchable.contains(it, ignoreCase = true)
+                }
+            }
         }
 
     override fun observeProgrammeRange(

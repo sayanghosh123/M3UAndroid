@@ -2,4 +2,7 @@
 <resources>
     <string name="feat_favorite_scheme_unknown">unknown</string>
     <string name="feat_favorite_play_randomly">play randomly</string>
+    <string name="feat_favorite_import">Import favorites</string>
+    <string name="feat_favorite_import_result">%1$d of %2$d channels favorited; %3$d not found</string>
+    <string name="feat_favorite_import_failed">The favorites file could not be imported</string>
 </resources>

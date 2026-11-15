@@ -4,6 +4,8 @@ package com.m3u.data.repository
 
 import com.m3u.data.repository.channel.ChannelRepository
 import com.m3u.data.repository.channel.ChannelRepositoryImpl
+import com.m3u.data.repository.curated.CuratedEventRepository
+import com.m3u.data.repository.curated.CuratedEventRepositoryImpl
 import com.m3u.data.repository.media.MediaRepository
 import com.m3u.data.repository.media.MediaRepositoryImpl
 import com.m3u.data.repository.playlist.PlaylistRepository
@@ -32,6 +34,12 @@ internal interface RepositoryModule {
     fun bindChannelRepository(
         repository: ChannelRepositoryImpl
     ): ChannelRepository
+
+    @Binds
+    @Singleton
+    fun bindCuratedEventRepository(
+        repository: CuratedEventRepositoryImpl
+    ): CuratedEventRepository
 
     @Binds
     @Singleton

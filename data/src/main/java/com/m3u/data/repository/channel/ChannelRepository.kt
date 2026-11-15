@@ -5,6 +5,7 @@ import androidx.paging.PagingSource
 import com.m3u.core.foundation.wrapper.Sort
 import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.data.database.model.Channel
+import com.m3u.data.database.model.ImportResult
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Duration
 
@@ -31,6 +32,7 @@ interface ChannelRepository {
     suspend fun getByPlaylistUrl(playlistUrl: String): List<Channel>
     suspend fun getByRelationIds(relationIds: List<String>): List<Channel>
     suspend fun favouriteOrUnfavourite(id: Int)
+    suspend fun importFavorites(content: String): ImportResult
     suspend fun hide(id: Int, target: Boolean)
     suspend fun reportPlayed(id: Int)
     suspend fun getPlayedRecently(): Channel?

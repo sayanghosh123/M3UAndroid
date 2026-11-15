@@ -23,6 +23,35 @@ It is made for users who want a clean, practical, ad-free IPTV app that works we
 - [Nightly Build](https://nightly.link/oxyroid/M3UAndroid/workflows/android/master/artifact.zip)
 - [Telegram Channel](https://t.me/m3u_android)
 
+## Importing favorites and sports events
+
+On the **Favorites** screen, use the import action to select either a plain-text file
+with one channel `tvg-id` or exact channel name per line, or a JSON array of those
+identifiers:
+
+```json
+["bbc-one", "Sky Sports Main Event"]
+```
+
+On the **Sports** screen, use the import action to select a JSON array. Times are Unix
+epoch milliseconds. Each event must identify a local channel by `channelId` (its
+`tvg-id`) or exact `channelName`:
+
+```json
+[
+  {
+    "title": "Home vs Away",
+    "competition": "Example League",
+    "channelId": "sports-1",
+    "startTime": 1770000000000,
+    "endTime": 1770007200000,
+    "sport": "Football"
+  }
+]
+```
+
+Imported events are stored on the device until **Clear imported events** is selected.
+
 ## 📺 TV and casting setup (Google TV, Samsung TV, Chromecast)
 
 There are **three different scenarios** to keep separate:

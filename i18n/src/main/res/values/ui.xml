@@ -5,6 +5,8 @@
     <string name="ui_title_setting">Settings</string>
     <string name="ui_destination_foryou">For You</string>
     <string name="ui_destination_favourite">Favorite</string>
+    <string name="ui_destination_epg_search">EPG Search</string>
+    <string name="ui_destination_sports">Sports</string>
     <string name="ui_destination_setting">Settings</string>
     <string name="ui_destination_playlist">Playlist</string>
     <string name="tv_home_title">M3U TV</string>

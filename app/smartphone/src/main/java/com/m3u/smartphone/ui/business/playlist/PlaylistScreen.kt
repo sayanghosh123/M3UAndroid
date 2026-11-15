@@ -223,6 +223,7 @@ internal fun PlaylistRoute(
                         }
                     )
                 }
+            },
             favourite = viewModel::favourite,
             hide = viewModel::hide,
             savePicture = { id ->

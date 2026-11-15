@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feat_epg_search_query">Search programmes</string>
+    <string name="feat_epg_search_category">Category (optional)</string>
+    <string name="feat_epg_watch">Watch channel</string>
+    <string name="feat_epg_sports_live">Live now</string>
+    <string name="feat_epg_sports_soon">Starting soon</string>
+    <string name="feat_epg_events_import">Import sports events</string>
+    <string name="feat_epg_events_clear">Clear imported events</string>
+    <string name="feat_epg_events_cleared">Imported events cleared</string>
+    <string name="feat_epg_events_import_result">%1$d of %2$d events imported; %3$d could not be matched</string>
+    <string name="feat_epg_import_failed">The import file could not be read</string>
+</resources>

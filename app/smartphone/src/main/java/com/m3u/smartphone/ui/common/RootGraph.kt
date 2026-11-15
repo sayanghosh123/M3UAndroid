@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.m3u.data.database.model.Playlist
+import com.m3u.smartphone.ui.business.epg.EpgSearchRoute
+import com.m3u.smartphone.ui.business.epg.SportsRoute
 import com.m3u.smartphone.ui.business.favourite.FavoriteRoute
 import com.m3u.smartphone.ui.business.foryou.ForyouRoute
 import com.m3u.smartphone.ui.business.setting.SettingRoute
@@ -58,6 +60,52 @@ fun NavGraphBuilder.rootGraph(
         FavoriteRoute(
             navigateToChannel = navigateToChannel,
             contentPadding = contentPadding,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (showBottomEdgeBlur) {
+                        Modifier.blurEdge(
+                            edge = Edge.Bottom,
+                            color = MaterialTheme.colorScheme.background,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
+        )
+    }
+
+    composable(
+        route = Destination.EpgSearch.name,
+        enterTransition = { fadeIn() },
+        exitTransition = { fadeOut() }
+    ) {
+        EpgSearchRoute(
+            contentPadding = contentPadding,
+            navigateToChannel = navigateToChannel,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (showBottomEdgeBlur) {
+                        Modifier.blurEdge(
+                            edge = Edge.Bottom,
+                            color = MaterialTheme.colorScheme.background,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
+        )
+    }
+
+    composable(
+        route = Destination.Sports.name,
+        enterTransition = { fadeIn() },
+        exitTransition = { fadeOut() }
+    ) {
+        SportsRoute(
+            contentPadding = contentPadding,
+            navigateToChannel = navigateToChannel,
             modifier = Modifier
                 .fillMaxSize()
                 .then(

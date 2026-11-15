@@ -6,9 +6,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SportsBasketball
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SportsBasketball
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.m3u.i18n.R.string
@@ -30,6 +34,16 @@ enum class Destination(
         selectedIcon = Icons.Rounded.Collections,
         unselectedIcon = Icons.Outlined.Collections,
         iconTextId = string.ui_destination_favourite
+    ),
+    EpgSearch(
+        selectedIcon = Icons.Rounded.Search,
+        unselectedIcon = Icons.Outlined.Search,
+        iconTextId = string.ui_destination_epg_search,
+    ),
+    Sports(
+        selectedIcon = Icons.Rounded.SportsBasketball,
+        unselectedIcon = Icons.Outlined.SportsBasketball,
+        iconTextId = string.ui_destination_sports,
     ),
     Setting(
         selectedIcon = Icons.Rounded.Settings,

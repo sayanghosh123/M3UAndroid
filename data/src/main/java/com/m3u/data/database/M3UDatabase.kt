@@ -6,6 +6,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.m3u.data.database.dao.ChannelDao
 import com.m3u.data.database.dao.ColorSchemeDao
+import com.m3u.data.database.dao.CuratedEventDao
 import com.m3u.data.database.dao.EpisodeDao
 import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.dao.ProgrammeDao
@@ -14,6 +15,7 @@ import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.ChannelMetadataBase
 import com.m3u.data.database.model.ChannelPlaybackReference
 import com.m3u.data.database.model.ColorScheme
+import com.m3u.data.database.model.CuratedEvent
 import com.m3u.data.database.model.Episode
 import com.m3u.data.database.model.ExtensionChannelMetadataOverlay
 import com.m3u.data.database.model.Playlist
@@ -35,8 +37,9 @@ import com.m3u.data.database.model.ProviderPlaybackSessionEntity
         ProviderPlaybackSessionEntity::class,
         ChannelMetadataBase::class,
         ExtensionChannelMetadataOverlay::class,
+        CuratedEvent::class,
     ],
-    version = 26,
+    version = 27,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(
@@ -77,6 +80,7 @@ import com.m3u.data.database.model.ProviderPlaybackSessionEntity
         AutoMigration(from = 20, to = 21),
         AutoMigration(from = 21, to = 22),
         AutoMigration(from = 23, to = 24),
+        AutoMigration(from = 26, to = 27),
     ]
 )
 @TypeConverters(Converters::class)
@@ -87,4 +91,5 @@ internal abstract class M3UDatabase : RoomDatabase() {
     abstract fun programmeDao(): ProgrammeDao
     abstract fun colorSchemeDao(): ColorSchemeDao
     abstract fun providerDao(): ProviderDao
+    abstract fun curatedEventDao(): CuratedEventDao
 }

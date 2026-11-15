@@ -22,6 +22,7 @@ import com.m3u.core.foundation.wrapper.Sort
 import com.m3u.core.foundation.wrapper.mapResource
 import com.m3u.core.foundation.wrapper.resource
 import com.m3u.data.database.model.Channel
+import com.m3u.data.database.model.ImportResult
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.parser.xtream.XtreamEpisodeInfo
 import com.m3u.data.repository.channel.ChannelRepository
@@ -98,6 +99,9 @@ class FavoriteViewModel @Inject constructor(
             channelRepository.favouriteOrUnfavourite(id)
         }
     }
+
+    suspend fun importFavorites(content: String): ImportResult =
+        channelRepository.importFavorites(content)
 
     fun createShortcut(context: Context, id: Int) {
         val shortcutId = "channel_$id"
