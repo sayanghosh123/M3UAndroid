@@ -1,16 +1,34 @@
 package com.m3u.smartphone.ui.business.foryou
 
 import android.content.res.Configuration.ORIENTATION_PORTRAIT
+import android.text.format.DateUtils
 import android.view.KeyEvent
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,9 +40,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -43,6 +68,8 @@ import com.m3u.core.foundation.wrapper.Resource
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.database.model.PlaylistWithCount
+import com.m3u.data.database.model.StreamKind
+import com.m3u.data.database.model.WatchHistory
 import com.m3u.data.database.model.isSeries
 import com.m3u.data.service.MediaCommand
 import com.m3u.i18n.R.string
@@ -82,7 +109,10 @@ fun ForyouRoute(
 
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val specs by viewModel.specs.collectAsStateWithLifecycle()
+    val watchHistory by viewModel.watchHistory.collectAsStateWithLifecycle()
     val episodes by viewModel.episodes.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     val series: Channel? by viewModel.series.collectAsStateWithLifecycle()
     val subscribingPlaylistUrls by viewModel.subscribingPlaylistUrls.collectAsStateWithLifecycle()
@@ -111,6 +141,7 @@ fun ForyouRoute(
             subscribingPlaylistUrls = subscribingPlaylistUrls,
             refreshingEpgUrls = refreshingEpgUrls,
             specs = specs,
+            watchHistory = watchHistory,
             rowCount = rowCount,
             contentPadding = contentPadding,
             navigateToPlaylist = navigateToPlaylist,
@@ -123,9 +154,41 @@ fun ForyouRoute(
                         }
 
                         else -> {
-                            helper.play(MediaCommand.Common(channel.id))
-                            navigateToChannel()
+                            if (helper.play(MediaCommand.Common(channel.id))) {
+                                navigateToChannel()
+                            }
                         }
+                    }
+                }
+            },
+            onPlayWatchHistory = { entry ->
+                coroutineScope.launch {
+                    val resolvedChannel = viewModel.resolveChannelForHistory(entry)
+                    val targetId = resolvedChannel?.id ?: entry.channelId
+                    val playlist = viewModel.getPlaylist(entry.playlistUrl)
+                    if (playlist?.isSeries == true && resolvedChannel != null) {
+                        viewModel.series.value = resolvedChannel
+                    } else if (helper.play(MediaCommand.Common(targetId))) {
+                        navigateToChannel()
+                    }
+                }
+            },
+            onRemoveWatchHistory = { entry ->
+                viewModel.removeWatchHistory(entry)
+                coroutineScope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    val message = context.getString(
+                        string.feat_foryou_watch_history_removed,
+                        entry.title
+                    )
+                    val undoLabel = context.getString(string.feat_foryou_watch_history_undo)
+                    val result = snackbarHostState.showSnackbar(
+                        message = message,
+                        actionLabel = undoLabel,
+                        duration = SnackbarDuration.Short,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.restoreWatchHistory(entry)
                     }
                 }
             },
@@ -154,13 +217,21 @@ fun ForyouRoute(
                             channelId = channel.id,
                             episode = episode
                         )
-                        helper.play(input)
-                        navigateToChannel()
+                        if (helper.play(input)) {
+                            navigateToChannel()
+                        }
                     }
                 }
             },
             onRefresh = { series?.let { viewModel.seriesReplay.value += 1 } },
             onDismissRequest = { viewModel.series.value = null }
+        )
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = contentPadding.calculateBottomPadding())
         )
     }
 }
@@ -172,9 +243,12 @@ private fun ForyouScreen(
     subscribingPlaylistUrls: List<String>,
     refreshingEpgUrls: List<String>,
     specs: List<Recommend.Spec>,
+    watchHistory: List<WatchHistory>,
     contentPadding: PaddingValues,
     navigateToPlaylist: (Playlist) -> Unit,
     onPlayChannel: (Channel) -> Unit,
+    onPlayWatchHistory: (WatchHistory) -> Unit,
+    onRemoveWatchHistory: (WatchHistory) -> Unit,
     navigateToPlaylistConfiguration: (Playlist) -> Unit,
     onUnsubscribePlaylist: (playlistUrl: String) -> Unit,
     modifier: Modifier = Modifier
@@ -209,14 +283,27 @@ private fun ForyouScreen(
 
     Box(modifier) {
         HeadlineBackground()
+        val hasHeader = specs.isNotEmpty() || watchHistory.isNotEmpty()
         val header = @Composable {
-            RecommendGallery(
-                specs = specs,
-                navigateToPlaylist = navigateToPlaylist,
-                onPlayChannel = onPlayChannel,
-                onSpecChanged = { spec -> headlineSpec = spec },
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (specs.isNotEmpty()) {
+                    RecommendGallery(
+                        specs = specs,
+                        navigateToPlaylist = navigateToPlaylist,
+                        onPlayChannel = onPlayChannel,
+                        onSpecChanged = { spec -> headlineSpec = spec },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (watchHistory.isNotEmpty()) {
+                    WatchHistoryStrip(
+                        entries = watchHistory,
+                        onPlay = onPlayWatchHistory,
+                        onRemove = onRemoveWatchHistory,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
         PlaylistGallery(
             rowCount = actualRowCount,
@@ -225,7 +312,7 @@ private fun ForyouScreen(
             refreshingEpgUrls = refreshingEpgUrls,
             onClick = navigateToPlaylist,
             onLongClick = { mediaSheetValue = MediaSheetValue.ForyouScreen(it) },
-            header = composableOf(specs.isNotEmpty(), header),
+            header = composableOf(hasHeader, header),
             contentPadding = contentPadding,
             modifier = Modifier.fillMaxSize()
         )
@@ -240,5 +327,176 @@ private fun ForyouScreen(
                 mediaSheetValue = MediaSheetValue.ForyouScreen()
             }
         )
+    }
+}
+
+@Composable
+private fun WatchHistoryStrip(
+    entries: List<WatchHistory>,
+    onPlay: (WatchHistory) -> Unit,
+    onRemove: (WatchHistory) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val spacing = LocalSpacing.current
+    Column(
+        verticalArrangement = Arrangement.spacedBy(spacing.small),
+        modifier = modifier.padding(vertical = spacing.small),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = spacing.medium),
+        ) {
+            Text(
+                text = stringResource(string.feat_foryou_watch_history_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(string.feat_foryou_watch_history_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(spacing.small),
+            contentPadding = PaddingValues(horizontal = spacing.medium),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(
+                items = entries,
+                key = { it.id },
+            ) { entry ->
+                WatchHistoryCard(
+                    entry = entry,
+                    onClick = { onPlay(entry) },
+                    onDoubleClick = { onRemove(entry) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun WatchHistoryCard(
+    entry: WatchHistory,
+    onClick: () -> Unit,
+    onDoubleClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val spacing = LocalSpacing.current
+    val context = LocalContext.current
+    val relativeTime = remember(entry.watchedAt) {
+        if (entry.watchedAt > 0L) {
+            DateUtils.getRelativeTimeSpanString(
+                entry.watchedAt,
+                System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS,
+                DateUtils.FORMAT_ABBREV_RELATIVE,
+            ).toString()
+        } else {
+            ""
+        }
+    }
+    val progress = remember(entry.positionMs, entry.durationMs) {
+        if (entry.durationMs > 0L && entry.positionMs > 0L) {
+            (entry.positionMs.toFloat() / entry.durationMs.toFloat()).coerceIn(0f, 1f)
+        } else {
+            null
+        }
+    }
+    val kindLabel = when (entry.kind) {
+        StreamKind.MOVIE -> stringResource(string.feat_playlist_media_movies)
+        StreamKind.SERIES -> stringResource(string.feat_playlist_media_series)
+        else -> null
+    }
+
+    ElevatedCard(
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+            .width(164.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onDoubleClick = onDoubleClick,
+            ),
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                if (!entry.cover.isNullOrBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(entry.cover)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = entry.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Text(
+                        text = entry.title.take(2).uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
+                if (kindLabel != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(spacing.extraSmall),
+                    ) {
+                        Text(
+                            text = kindLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                if (progress != null) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter),
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.padding(spacing.small),
+            ) {
+                Text(
+                    text = entry.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val subtitle = listOfNotNull(
+                    entry.category.takeIf(String::isNotBlank),
+                    relativeTime.takeIf(String::isNotBlank),
+                ).joinToString(" • ")
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
     }
 }

@@ -12,6 +12,7 @@ import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.ChannelMetadataBase
 import com.m3u.data.database.model.ExtensionChannelMetadataOverlay
+import com.m3u.data.database.model.SportsChannelCandidate
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -179,17 +180,69 @@ interface ChannelDao {
         }
     }
 
+    @Query("SELECT DISTINCT kind FROM streams WHERE playlist_url = :playlistUrl")
+    fun observeDistinctKindsByPlaylistUrl(playlistUrl: String): Flow<List<Int>>
+
+    @Query(
+        """
+        SELECT s.id AS channel_id,
+               s.title AS channel_title,
+               s.`group` AS channel_group,
+               s.url AS channel_url,
+               s.cover AS channel_cover,
+               s.relation_id AS relation_id,
+               pl.title AS playlist_title,
+               s.playlist_url AS playlist_url
+        FROM streams AS s
+        JOIN playlists AS pl ON pl.url = s.playlist_url
+        WHERE s.hidden = 0
+          AND s.kind = 0
+          AND (
+              LOWER(s.`group`) LIKE '%sport%'
+              OR LOWER(s.`group`) LIKE '%football%'
+              OR LOWER(s.`group`) LIKE '%soccer%'
+              OR LOWER(s.`group`) LIKE '%epl%'
+              OR LOWER(s.`group`) LIKE '%premier%'
+              OR LOWER(s.`group`) LIKE '%champions%'
+              OR LOWER(s.`group`) LIKE '%uefa%'
+              OR LOWER(s.`group`) LIKE '%laliga%'
+              OR LOWER(s.`group`) LIKE '%la liga%'
+              OR LOWER(s.`group`) LIKE '%serie a%'
+              OR LOWER(s.`group`) LIKE '%bundesliga%'
+              OR LOWER(s.`group`) LIKE '%ligue%'
+              OR LOWER(s.`group`) LIKE '%ppv%'
+              OR LOWER(s.`group`) LIKE '%match%'
+              OR LOWER(s.`group`) LIKE '%bein%'
+              OR LOWER(s.`group`) LIKE '%dazn%'
+              OR LOWER(s.`group`) LIKE '%espn%'
+              OR LOWER(s.`group`) LIKE '%sky%'
+              OR LOWER(s.`group`) LIKE '%f1%'
+              OR LOWER(s.`group`) LIKE '%ufc%'
+              OR LOWER(s.`group`) LIKE '%nba%'
+              OR LOWER(s.`group`) LIKE '%nfl%'
+              OR LOWER(s.`group`) LIKE '%tennis%'
+              OR LOWER(s.`group`) LIKE '%cricket%'
+              OR LOWER(s.title) LIKE '% vs %'
+              OR LOWER(s.title) LIKE '% v %'
+          )
+        ORDER BY s.`group` ASC, s.title ASC
+        """
+    )
+    fun observeSportsChannelCandidates(): Flow<List<SportsChannelCandidate>>
+
     @Query(
         """
             SELECT DISTINCT `group`
             FROM streams
             WHERE playlist_url = :playlistUrl
             AND title LIKE '%'||:query||'%'
+            AND (:kind IS NULL OR kind = :kind)
         """
     )
     suspend fun getCategoriesByPlaylistUrl(
         playlistUrl: String,
-        query: String
+        query: String,
+        kind: Int? = null
     ): List<String>
 
     @Query(
@@ -198,11 +251,13 @@ interface ChannelDao {
             FROM streams
             WHERE playlist_url = :playlistUrl
             AND title LIKE '%'||:query||'%'
+            AND (:kind IS NULL OR kind = :kind)
         """
     )
     fun observeCategoriesByPlaylistUrl(
         playlistUrl: String,
-        query: String
+        query: String,
+        kind: Int? = null
     ): Flow<List<String>>
 
     @Delete
@@ -276,7 +331,8 @@ interface ChannelDao {
             stream.favourite AS favourite,
             stream.hidden AS hidden,
             stream.seen AS seen,
-            stream.relation_id AS relation_id
+            stream.relation_id AS relation_id,
+            stream.kind AS kind
         FROM streams AS stream
         LEFT JOIN channel_metadata_bases AS base
             ON base.playlist_url = stream.playlist_url
@@ -315,12 +371,14 @@ interface ChannelDao {
             WHERE playlist_url = :url
             AND title LIKE '%'||:query||'%'
             AND `group` = :category
+            AND (:kind IS NULL OR kind = :kind)
         """
     )
     fun pagingAllByPlaylistUrl(
         url: String,
         category: String,
-        query: String
+        query: String,
+        kind: Int? = null
     ): PagingSource<Int, Channel>
 
     @Query(
@@ -329,13 +387,15 @@ interface ChannelDao {
             WHERE playlist_url = :url
             AND title LIKE '%'||:query||'%'
             AND `group` = :category
+            AND (:kind IS NULL OR kind = :kind)
             ORDER BY title ASC
         """
     )
     fun pagingAllByPlaylistUrlAsc(
         url: String,
         category: String,
-        query: String
+        query: String,
+        kind: Int? = null
     ): PagingSource<Int, Channel>
 
     @Query(
@@ -344,13 +404,15 @@ interface ChannelDao {
             WHERE playlist_url = :url
             AND title LIKE '%'||:query||'%'
             AND `group` = :category
+            AND (:kind IS NULL OR kind = :kind)
             ORDER BY title DESC
         """
     )
     fun pagingAllByPlaylistUrlDesc(
         url: String,
         category: String,
-        query: String
+        query: String,
+        kind: Int? = null
     ): PagingSource<Int, Channel>
 
     @Query(
@@ -359,13 +421,15 @@ interface ChannelDao {
             WHERE playlist_url = :url
             AND title LIKE '%'||:query||'%'
             AND `group` = :category
+            AND (:kind IS NULL OR kind = :kind)
             ORDER BY seen DESC
         """
     )
     fun pagingAllByPlaylistUrlRecently(
         url: String,
         category: String,
-        query: String
+        query: String,
+        kind: Int? = null
     ): PagingSource<Int, Channel>
 
     @Query(
@@ -373,11 +437,13 @@ interface ChannelDao {
             SELECT * FROM streams 
             WHERE playlist_url = :url
             AND title LIKE '%'||:query||'%'
+            AND (:kind IS NULL OR kind = :kind)
         """
     )
     fun pagingAllByPlaylistUrlMixed(
         url: String,
-        query: String
+        query: String,
+        kind: Int? = null
     ): PagingSource<Int, Channel>
 
     @Query("SELECT COUNT(playlist_url) FROM streams WHERE playlist_url = :playlistUrl")
@@ -472,6 +538,7 @@ interface ChannelDao {
             WHERE playlist_url = :playlistUrl
             AND hidden = 0
             AND `group` NOT IN (:hiddenCategories)
+            AND (:kind IS NULL OR kind = :kind)
             AND LOWER(title) LIKE '%' || LOWER(:escapedQuery) || '%' ESCAPE '\'
             ORDER BY
                 CASE
@@ -489,7 +556,8 @@ interface ChannelDao {
         playlistUrl: String,
         rawQuery: String,
         escapedQuery: String,
-        hiddenCategories: List<String>
+        hiddenCategories: List<String>,
+        kind: Int? = null
     ): PagingSource<Int, Channel>
 
     @Query(

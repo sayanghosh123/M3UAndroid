@@ -68,6 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
@@ -77,6 +78,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -94,8 +96,8 @@ import javax.inject.Inject
 
 private const val BUFFER_M3U_CAPACITY = 500
 private const val BUFFER_XTREAM_CAPACITY = 100
-private const val MAX_STAGED_CHANNELS = 200_000
-private const val MAX_STAGED_CHANNEL_BYTES = 256L * 1024L * 1024L
+private const val MAX_STAGED_CHANNELS = 1_000_000
+private const val MAX_STAGED_CHANNEL_BYTES = 512L * 1024L * 1024L
 private const val MAX_STAGED_CHANNEL_RECORD_BYTES = 1024 * 1024
 private const val BUFFER_RESTORE_CAPACITY = 400
 private const val MAX_RESTORED_PROVIDER_ACCOUNTS = 256
@@ -171,7 +173,8 @@ internal class PlaylistRepositoryImpl @Inject constructor(
         title: String,
         url: String,
         callback: (count: Int) -> Unit
-    ) = PlaylistDataMaintenanceCoordinator.withExclusive {
+    ) = withContext(Dispatchers.IO) {
+        PlaylistDataMaintenanceCoordinator.withExclusive {
         val location = url.resolveM3uSourceLocation()
         extensionContributionRunCoordinator.withPlaylists(listOf(url, location.internalUrl)) {
             val sourceStagingFile = location.destinationFile?.let { destination ->
@@ -191,6 +194,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
             } finally {
                 sourceStagingFile?.deleteOrTruncate()
             }
+        }
         }
     }
 
@@ -256,6 +260,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                     deleteChannelsForImport(internalUrl, playlistStrategy)
                     playlistDao.insertOrReplace(playlist)
                     staging.forEachBatch(BUFFER_M3U_CAPACITY) { staged ->
+                        currentCoroutineContext().ensureActive()
                         val channelsToInsert = staged
                             .asSequence()
                             .filterNot { record ->
@@ -274,6 +279,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                         if (channelsToInsert.isNotEmpty()) {
                             channelDao.insertOrReplaceAll(*channelsToInsert.toTypedArray())
                         }
+                        yield()
                     }
                     channelDao.deleteOrphanedMetadata(internalUrl)
                 }
@@ -347,6 +353,18 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                 if (requiredSeries) add(seriesPlaylistUrl)
             }
             callback(0)
+            val liveCategoryNames = liveCategories.associateBy(
+                keySelector = { it.categoryId },
+                valueTransform = { it.categoryName.orEmpty() },
+            )
+            val vodCategoryNames = vodCategories.associateBy(
+                keySelector = { it.categoryId },
+                valueTransform = { it.categoryName.orEmpty() },
+            )
+            val serialCategoryNames = serialCategories.associateBy(
+                keySelector = { it.categoryId },
+                valueTransform = { it.categoryName.orEmpty() },
+            )
             val stagedChannels = xtreamParser.parse(input).map { current ->
                 when (current) {
                     is XtreamLive -> StagedChannel(
@@ -355,10 +373,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                             username = username,
                             password = password,
                             playlistUrl = livePlaylistUrl,
-                            category = liveCategories
-                                .find { it.categoryId == current.categoryId }
-                                ?.categoryName
-                                .orEmpty(),
+                            category = liveCategoryNames[current.categoryId].orEmpty(),
                             containerExtension = liveContainerExtension,
                         ),
                         preservationRelationId = current.streamId?.toString(),
@@ -370,10 +385,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                             username = username,
                             password = password,
                             playlistUrl = vodPlaylistUrl,
-                            category = vodCategories
-                                .find { it.categoryId == current.categoryId }
-                                ?.categoryName
-                                .orEmpty(),
+                            category = vodCategoryNames[current.categoryId].orEmpty(),
                         ),
                         preservationRelationId = current.streamId?.toString(),
                     )
@@ -385,10 +397,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                             username = username,
                             password = password,
                             playlistUrl = seriesPlaylistUrl,
-                            category = serialCategories
-                                .find { it.categoryId == current.categoryId }
-                                ?.categoryName
-                                .orEmpty(),
+                            category = serialCategoryNames[current.categoryId].orEmpty(),
                         ),
                         preservationRelationId = current.seriesId?.toString(),
                     )
@@ -422,6 +431,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                         playlistDao.insertOrReplace(playlist)
                     }
                     staging.forEachBatch(BUFFER_XTREAM_CAPACITY) { staged ->
+                        currentCoroutineContext().ensureActive()
                         val channelsToInsert = staged
                             .asSequence()
                             .filterNot { record ->
@@ -438,6 +448,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                         if (channelsToInsert.isNotEmpty()) {
                             channelDao.insertOrReplaceAll(*channelsToInsert.toTypedArray())
                         }
+                        yield()
                     }
                     requiredPlaylists.forEach { playlist ->
                         channelDao.deleteOrphanedMetadata(playlist.url)
@@ -493,6 +504,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
                     if (count % progressBatchSize == 0) {
                         callback(count)
                         lastReportedCount = count
+                        yield()
                     }
                 }
                 currentCoroutineContext().ensureActive()
@@ -1043,25 +1055,27 @@ internal class PlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun getCategoriesByPlaylistUrlIgnoreHidden(
         url: String,
-        query: String
+        query: String,
+        kind: Int?,
     ): List<String> = playlistDao.get(url).let { playlist ->
         val pinnedCategories = playlist?.pinnedCategories ?: emptyList()
         val hiddenCategories = playlist?.hiddenCategories ?: emptyList()
         channelDao
-            .getCategoriesByPlaylistUrl(url, query)
+            .getCategoriesByPlaylistUrl(url, query, kind)
             .filterNot { it in hiddenCategories }
             .sortedByDescending { it in pinnedCategories }
     }
 
     override fun observeCategoriesByPlaylistUrlIgnoreHidden(
         url: String,
-        query: String
+        query: String,
+        kind: Int?,
     ): Flow<List<String>> = playlistDao.observeByUrl(url).flatMapLatest { playlist ->
         playlist ?: return@flatMapLatest flowOf()
         val pinnedCategories = playlist.pinnedCategories
         val hiddenCategories = playlist.hiddenCategories
         channelDao
-            .observeCategoriesByPlaylistUrl(playlist.url, query)
+            .observeCategoriesByPlaylistUrl(playlist.url, query, kind)
             .map { categories ->
                 categories
                     .filterNot { it in hiddenCategories }
@@ -1469,7 +1483,7 @@ internal class PlaylistRepositoryImpl @Inject constructor(
         const val LOCAL_M3U_TEMPORARY_SUFFIX = ".tmp"
         const val LOCAL_M3U_ROLLBACK_SUFFIX = ".rollback"
         const val LOCAL_M3U_COPY_BUFFER_BYTES = 32 * 1024
-        const val MAX_LOCAL_M3U_BYTES = 256L * 1024L * 1024L
+        const val MAX_LOCAL_M3U_BYTES = 512L * 1024L * 1024L
     }
 }
 

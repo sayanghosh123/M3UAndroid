@@ -70,8 +70,9 @@ fun EpgSearchRoute(
         onCategoryChanged = { viewModel.category.value = it },
         onWatch = {
             scope.launch {
-                helper.play(MediaCommand.Common(it.channelId))
-                navigateToChannel()
+                if (helper.play(MediaCommand.Common(it.channelId))) {
+                    navigateToChannel()
+                }
             }
         },
     )

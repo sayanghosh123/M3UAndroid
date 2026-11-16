@@ -13,6 +13,7 @@ import com.m3u.core.foundation.wrapper.mapResource
 import com.m3u.core.foundation.wrapper.resource
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
+import com.m3u.data.database.model.WatchHistory
 import com.m3u.data.parser.xtream.XtreamEpisodeInfo
 import com.m3u.data.repository.channel.ChannelRepository
 import com.m3u.data.repository.playlist.PlaylistRepository
@@ -41,7 +42,7 @@ import kotlin.time.toDuration
 @HiltViewModel
 class ForyouViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
-    channelRepository: ChannelRepository,
+    private val channelRepository: ChannelRepository,
     programmeRepository: ProgrammeRepository,
     private val playerManager: PlayerManager,
     settings: Settings,
@@ -134,4 +135,29 @@ class ForyouViewModel @Inject constructor(
 
     suspend fun getPlaylist(playlistUrl: String): Playlist? =
         playlistRepository.get(playlistUrl)
+
+    val watchHistory: StateFlow<List<WatchHistory>> = channelRepository
+        .observeWatchHistory()
+        .stateIn(
+            scope = viewModelScope,
+            initialValue = emptyList(),
+            started = SharingStarted.WhileSubscribed(5_000L)
+        )
+
+    fun removeWatchHistory(entry: WatchHistory) {
+        viewModelScope.launch {
+            channelRepository.deleteWatchHistory(entry.id)
+        }
+    }
+
+    fun restoreWatchHistory(entry: WatchHistory) {
+        viewModelScope.launch {
+            channelRepository.restoreWatchHistory(entry)
+        }
+    }
+
+    suspend fun resolveChannelForHistory(entry: WatchHistory): Channel? {
+        val id = channelRepository.resolveChannelIdForHistory(entry) ?: return null
+        return channelRepository.get(id)
+    }
 }

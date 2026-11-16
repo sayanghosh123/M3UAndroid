@@ -19,6 +19,69 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 
+/**
+ * Thread-safe snapshot of active Media3 player metrics updated on the player's looper.
+ */
+@Immutable
+data class PlayerTelemetrySnapshot(
+    val streamFormat: String? = null,
+    val videoCodec: String? = null,
+    val audioCodec: String? = null,
+    val resolution: String? = null,
+    val httpResponseCode: Int? = null,
+    val playbackState: Int = Player.STATE_IDLE,
+    val isPlaying: Boolean = false,
+    val bufferedPositionMs: Long = -1L,
+    val currentPositionMs: Long = -1L,
+    val totalBufferedDurationMs: Long = -1L,
+    val lastErrorCode: Int? = null,
+    val lastErrorName: String? = null,
+    val updatedAtEpochMs: Long = 0L
+)
+
+@Immutable
+data class ExternalPlaybackTarget(
+    val title: String,
+    val url: String,
+    val mimeType: String,
+    val userAgent: String? = null,
+    val referer: String? = null,
+    val headers: Map<String, String> = emptyMap(),
+) {
+    /**
+     * Converts merged HTTP headers into an alternating `[key, value, ...]` array recognized by VLC
+     * and MX Player via the `headers` Intent extra.
+     */
+    fun toIntentHeadersArray(): Array<String> = buildHeadersArray(
+        userAgent = userAgent,
+        referer = referer,
+        headers = headers,
+    )
+
+    companion object {
+        fun buildHeadersArray(
+            userAgent: String?,
+            referer: String?,
+            headers: Map<String, String>,
+        ): Array<String> {
+            val ordered = linkedMapOf<String, String>()
+            userAgent?.takeIf { it.isNotBlank() }?.let { ordered["User-Agent"] = it }
+            referer?.takeIf { it.isNotBlank() }?.let { ordered["Referer"] = it }
+            headers.forEach { (rawKey, value) ->
+                val key = rawKey.trim()
+                if (key.isEmpty() || value.isBlank()) return@forEach
+                val existingKey = ordered.keys.firstOrNull { it.equals(key, ignoreCase = true) }
+                if (existingKey == null) {
+                    ordered[key] = value
+                }
+            }
+            return ordered.entries
+                .flatMap { (k, v) -> listOf(k, v) }
+                .toTypedArray()
+        }
+    }
+}
+
 interface PlayerManager {
     val player: StateFlow<Player?>
     val size: StateFlow<Rect>
@@ -29,6 +92,7 @@ interface PlayerManager {
     val playbackState: StateFlow<@Player.State Int>
     val playbackException: StateFlow<PlaybackException?>
     val isPlaying: StateFlow<Boolean>
+    val telemetrySnapshot: StateFlow<PlayerTelemetrySnapshot>
 
     val tracksGroups: StateFlow<List<Tracks.Group>>
     val cacheSpace: Flow<Long>
@@ -39,6 +103,7 @@ interface PlayerManager {
         command: MediaCommand,
         applyContinueWatching: Boolean = true
     )
+    suspend fun resolveExternalPlaybackTarget(command: MediaCommand): ExternalPlaybackTarget?
     suspend fun replay()
     fun release()
     fun clearCache()

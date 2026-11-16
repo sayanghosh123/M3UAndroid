@@ -13,6 +13,7 @@ import com.m3u.data.database.dao.EpisodeDao
 import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.dao.ProgrammeDao
 import com.m3u.data.database.dao.ProviderDao
+import com.m3u.data.database.dao.WatchHistoryDao
 import com.m3u.data.database.example.ColorSchemeExample
 import com.m3u.data.extension.security.CredentialVault
 import dagger.Module
@@ -94,4 +95,10 @@ internal object DatabaseModule {
     fun provideCuratedEventDao(
         database: M3UDatabase
     ): CuratedEventDao = database.curatedEventDao()
+
+    @Provides
+    @Singleton
+    fun provideWatchHistoryDao(
+        database: M3UDatabase
+    ): WatchHistoryDao = database.watchHistoryDao()
 }

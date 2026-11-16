@@ -146,8 +146,9 @@ fun FavoriteRoute(
                     }
 
                     else -> {
-                        helper.play(MediaCommand.Common(channel.id))
-                        navigateToChannel()
+                        if (helper.play(MediaCommand.Common(channel.id))) {
+                            navigateToChannel()
+                        }
                     }
                 }
             }
@@ -181,8 +182,9 @@ fun FavoriteRoute(
                         channelId = it.id,
                         episode = episode
                     )
-                    helper.play(input)
-                    navigateToChannel()
+                    if (helper.play(input)) {
+                        navigateToChannel()
+                    }
                 }
             }
         },
@@ -207,8 +209,18 @@ fun FavoriteRoute(
             viewModel.createShortcut(context, channel.id)
             mediaSheetValue = MediaSheetValue.FavoriteScreen()
         },
-        onDismissRequest = {
+        onOpenInExternalPlayer = { channel ->
             mediaSheetValue = MediaSheetValue.FavoriteScreen()
+            coroutineScope.launch {
+                val playlist = viewModel.getPlaylist(channel.playlistUrl)
+                if (playlist?.isSeries == true) {
+                    viewModel.series.value = channel
+                } else {
+                    helper.openInExternalPlayer(MediaCommand.Common(channel.id))
+                }
+            }
+        },
+        onDismissRequest = {
             mediaSheetValue = MediaSheetValue.FavoriteScreen()
         }
     )

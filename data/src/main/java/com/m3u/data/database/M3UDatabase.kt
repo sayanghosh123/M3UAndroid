@@ -11,6 +11,7 @@ import com.m3u.data.database.dao.EpisodeDao
 import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.dao.ProgrammeDao
 import com.m3u.data.database.dao.ProviderDao
+import com.m3u.data.database.dao.WatchHistoryDao
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.ChannelMetadataBase
 import com.m3u.data.database.model.ChannelPlaybackReference
@@ -23,6 +24,7 @@ import com.m3u.data.database.model.Programme
 import com.m3u.data.database.model.ProviderAccount
 import com.m3u.data.database.model.ProviderCredentialEntity
 import com.m3u.data.database.model.ProviderPlaybackSessionEntity
+import com.m3u.data.database.model.WatchHistory
 
 @Database(
     entities = [
@@ -38,8 +40,9 @@ import com.m3u.data.database.model.ProviderPlaybackSessionEntity
         ChannelMetadataBase::class,
         ExtensionChannelMetadataOverlay::class,
         CuratedEvent::class,
+        WatchHistory::class,
     ],
-    version = 27,
+    version = 28,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(
@@ -81,6 +84,7 @@ import com.m3u.data.database.model.ProviderPlaybackSessionEntity
         AutoMigration(from = 21, to = 22),
         AutoMigration(from = 23, to = 24),
         AutoMigration(from = 26, to = 27),
+        AutoMigration(from = 27, to = 28),
     ]
 )
 @TypeConverters(Converters::class)
@@ -92,4 +96,5 @@ internal abstract class M3UDatabase : RoomDatabase() {
     abstract fun colorSchemeDao(): ColorSchemeDao
     abstract fun providerDao(): ProviderDao
     abstract fun curatedEventDao(): CuratedEventDao
+    abstract fun watchHistoryDao(): WatchHistoryDao
 }

@@ -1,6 +1,7 @@
 package com.m3u.data.parser.xtream
 
 import com.m3u.data.database.model.Channel
+import com.m3u.data.database.model.StreamKind
 
 typealias XtreamData = dev.oxyroid.parser.xtream.XtreamData
 typealias XtreamLive = dev.oxyroid.parser.xtream.XtreamLive
@@ -21,7 +22,8 @@ fun XtreamLive.toChannel(
     title = name.orEmpty(),
     cover = streamIcon,
     playlistUrl = playlistUrl,
-    relationId = epgChannelId
+    relationId = epgChannelId,
+    kind = StreamKind.LIVE
 )
 
 fun XtreamVod.toChannel(
@@ -36,7 +38,8 @@ fun XtreamVod.toChannel(
     title = name.orEmpty(),
     cover = streamIcon,
     playlistUrl = playlistUrl,
-    relationId = streamId?.toString()
+    relationId = streamId?.toString(),
+    kind = StreamKind.MOVIE
 )
 
 fun XtreamSerial.asChannel(
@@ -51,5 +54,6 @@ fun XtreamSerial.asChannel(
     title = name.orEmpty(),
     cover = cover,
     playlistUrl = playlistUrl,
-    relationId = seriesId?.toString()
+    relationId = seriesId?.toString(),
+    kind = StreamKind.SERIES
 )

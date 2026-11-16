@@ -63,7 +63,10 @@ data class Channel(
      * if it is xtream vod, it may be streamId.
      * if it is xtream series, it may be seriesId.
      */
-    val relationId: String? = null
+    val relationId: String? = null,
+    @ColumnInfo(name = "kind", index = true, defaultValue = "0")
+    @Exclude
+    val kind: Int = StreamKind.LIVE
 ) {
     companion object {
         const val URL_DYNAMIC = "dynamic"
@@ -72,6 +75,12 @@ data class Channel(
         const val LICENSE_TYPE_CLEAR_KEY_2 = "org.w3.clearkey"
         const val LICENSE_TYPE_PLAY_READY = "com.microsoft.playready"
     }
+}
+
+object StreamKind {
+    const val LIVE = 0
+    const val MOVIE = 1
+    const val SERIES = 2
 }
 
 fun Channel.copyXtreamEpisode(episode: XtreamEpisodeInfo): Channel {

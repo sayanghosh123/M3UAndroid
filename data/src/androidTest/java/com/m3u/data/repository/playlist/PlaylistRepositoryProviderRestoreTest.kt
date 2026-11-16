@@ -170,6 +170,7 @@ class PlaylistRepositoryProviderRestoreTest {
             val channelRepository = ChannelRepositoryImpl(
                 channelDao = database.channelDao(),
                 playlistDao = database.playlistDao(),
+                watchHistoryDao = database.watchHistoryDao(),
                 settings = context.settings,
             )
             val maintenanceEntered = CompletableDeferred<Unit>()

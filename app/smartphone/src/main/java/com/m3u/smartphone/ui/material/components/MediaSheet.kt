@@ -58,7 +58,8 @@ fun MediaSheet(
     onFavoriteChannel: (Channel) -> Unit = { noImpl() },
     onHideChannel: (Channel) -> Unit = { noImpl() },
     onSaveChannelCover: (Channel) -> Unit = { noImpl() },
-    onCreateShortcut: (Channel) -> Unit = { noImpl() }
+    onCreateShortcut: (Channel) -> Unit = { noImpl() },
+    onOpenInExternalPlayer: (Channel) -> Unit = { noImpl() },
 ) {
     val spacing = LocalSpacing.current
     val clipboardManager = LocalClipboardManager.current
@@ -148,6 +149,13 @@ fun MediaSheet(
                                     onDismissRequest()
                                 }
                             )
+                            MediaSheetItem(
+                                stringRes = string.feat_channel_open_in_external_app,
+                                onClick = {
+                                    onOpenInExternalPlayer(it)
+                                    onDismissRequest()
+                                }
+                            )
                         }
                     }
 
@@ -165,6 +173,13 @@ fun MediaSheet(
                                 stringRes = string.feat_playlist_dialog_create_shortcut_title,
                                 onClick = {
                                     onCreateShortcut(it)
+                                    onDismissRequest()
+                                }
+                            )
+                            MediaSheetItem(
+                                stringRes = string.feat_channel_open_in_external_app,
+                                onClick = {
+                                    onOpenInExternalPlayer(it)
                                     onDismissRequest()
                                 }
                             )

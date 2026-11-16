@@ -9,10 +9,18 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import io.github.anilbeesetti.nextlib.mediainfo.MediaInfoBuilder
 
 object Codecs {
-    fun createRenderersFactory(context: Context): RenderersFactory {
+    fun createRenderersFactory(
+        context: Context,
+        preferExtensionDecoder: Boolean = false,
+    ): RenderersFactory {
+        val mode = if (preferExtensionDecoder) {
+            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+        } else {
+            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+        }
         return NextRenderersFactory(context).apply {
             setEnableDecoderFallback(true)
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            setExtensionRendererMode(mode)
         }
     }
 

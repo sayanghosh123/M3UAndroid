@@ -19,6 +19,10 @@ import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.m3u.core.foundation.architecture.preferences.PlayerMode
+import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
+import com.m3u.core.foundation.architecture.preferences.Settings as AppSettings
+import com.m3u.core.foundation.architecture.preferences.get
 import com.m3u.core.foundation.util.basic.rational
 import com.m3u.core.foundation.util.context.isDarkMode
 import com.m3u.core.foundation.util.context.isPortraitMode
@@ -28,6 +32,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 typealias OnPipModeChanged = Consumer<PictureInPictureModeChangedInfo>
 
@@ -37,6 +43,7 @@ class Helper(private val activity: ComponentActivity) {
     @InstallIn(SingletonComponent::class)
     interface HelperEntryPoint {
         val playerManager: PlayerManager
+        val settings: AppSettings
     }
 
     private val controller by lazy {
@@ -52,6 +59,7 @@ class Helper(private val activity: ComponentActivity) {
         EntryPointAccessors.fromApplication<HelperEntryPoint>(activity.applicationContext)
     }
     private val playerManager by lazy { entryPoint.playerManager }
+    private val appSettings by lazy { entryPoint.settings }
 
     var statusBarVisibility: Boolean? = null
         set(value) {
@@ -116,8 +124,26 @@ class Helper(private val activity: ComponentActivity) {
         }
     }
 
-    suspend fun play(mediaCommand: MediaCommand) {
+    suspend fun play(mediaCommand: MediaCommand): Boolean {
+        if (appSettings[PreferencesKeys.DEFAULT_PLAYER_MODE] == PlayerMode.EXTERNAL) {
+            if (openInExternalPlayer(mediaCommand)) {
+                return false
+            }
+        }
         playerManager.play(mediaCommand)
+        return true
+    }
+
+    suspend fun openInExternalPlayer(mediaCommand: MediaCommand): Boolean {
+        val target = playerManager.resolveExternalPlaybackTarget(mediaCommand) ?: return false
+        if (playerManager.player.value != null) {
+            withContext(Dispatchers.Main) {
+                playerManager.release()
+            }
+        }
+        return withContext(Dispatchers.Main) {
+            ExternalPlayerLauncher.launch(activity, target)
+        }
     }
 
     suspend fun replay() {

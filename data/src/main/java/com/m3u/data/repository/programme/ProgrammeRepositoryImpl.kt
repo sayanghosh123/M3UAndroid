@@ -9,6 +9,7 @@ import com.m3u.core.foundation.util.basic.letIf
 import com.m3u.data.api.OkhttpClient
 import com.m3u.data.database.M3UDatabase
 import com.m3u.data.database.dao.ChannelDao
+import com.m3u.data.database.dao.CuratedEventDao
 import com.m3u.data.database.dao.PlaylistDao
 import com.m3u.data.database.dao.ProgrammeDao
 import com.m3u.data.database.model.Programme
@@ -35,6 +36,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -42,6 +44,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -54,6 +57,7 @@ internal class ProgrammeRepositoryImpl @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
     private val programmeDao: ProgrammeDao,
+    private val curatedEventDao: CuratedEventDao,
     private val epgParser: EpgParser,
     @OkhttpClient(true) private val okHttpClient: OkHttpClient,
     @ApplicationContext private val context: Context,
@@ -98,6 +102,33 @@ internal class ProgrammeRepositoryImpl @Inject constructor(
                 }
             }
         }
+
+    override fun observeSportsMatches(
+        now: Long,
+        windowStart: Long,
+        windowEnd: Long,
+        preset: SportPreset,
+        includeLiveUnscheduledChannels: Boolean,
+        upcomingOnly: Boolean,
+    ): Flow<List<CuratedMatch>> = combine(
+        programmeDao.observeSportsProgrammesInWindow(windowStart, windowEnd),
+        if (includeLiveUnscheduledChannels && !upcomingOnly) {
+            channelDao.observeSportsChannelCandidates()
+        } else {
+            flowOf(emptyList())
+        },
+        curatedEventDao.observeInWindow(windowStart, windowEnd),
+    ) { programmes, sportsChannels, curatedEvents ->
+        SportsMatchCuration.curateMatches(
+            programmes = programmes,
+            sportsChannels = sportsChannels,
+            curatedEvents = curatedEvents,
+            preset = preset,
+            now = now,
+            includeLiveUnscheduledChannels = includeLiveUnscheduledChannels,
+            upcomingOnly = upcomingOnly,
+        )
+    }.flowOn(Dispatchers.Default)
 
     override fun observeProgrammeRange(
         playlistUrl: String,
@@ -217,9 +248,11 @@ internal class ProgrammeRepositoryImpl @Inject constructor(
                             database.withTransaction {
                                 programmeDao.cleanByEpgUrl(epgUrl)
                                 staging.forEachBatch(EPG_INSERT_BATCH_SIZE) { programmes ->
+                                    currentCoroutineContext().ensureActive()
                                     programmeDao.insertOrReplaceAll(
                                         *programmes.toTypedArray()
                                     )
+                                    yield()
                                 }
                             }
                         } finally {

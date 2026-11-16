@@ -23,6 +23,15 @@ interface ProgrammeRepository {
         windowEnd: Long,
     ): Flow<List<ProgrammeSearchResult>>
 
+    fun observeSportsMatches(
+        now: Long,
+        windowStart: Long,
+        windowEnd: Long,
+        preset: SportPreset,
+        includeLiveUnscheduledChannels: Boolean,
+        upcomingOnly: Boolean,
+    ): Flow<List<CuratedMatch>>
+
     fun observeProgrammeRange(
         playlistUrl: String,
         relationId: String

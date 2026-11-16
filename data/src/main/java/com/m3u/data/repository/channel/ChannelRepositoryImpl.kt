@@ -5,9 +5,11 @@ import com.m3u.core.foundation.architecture.preferences.Settings
 import com.m3u.core.foundation.wrapper.Sort
 import com.m3u.data.database.dao.ChannelDao
 import com.m3u.data.database.dao.PlaylistDao
+import com.m3u.data.database.dao.WatchHistoryDao
 import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.ImportResult
+import com.m3u.data.database.model.WatchHistory
 import com.m3u.data.repository.playlist.PlaylistDataMaintenanceCoordinator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -21,6 +23,7 @@ import kotlin.time.Duration
 internal class ChannelRepositoryImpl @Inject constructor(
     private val channelDao: ChannelDao,
     private val playlistDao: PlaylistDao,
+    private val watchHistoryDao: WatchHistoryDao,
     private val settings: Settings,
 ) : ChannelRepository {
     private companion object {
@@ -35,6 +38,10 @@ internal class ChannelRepositoryImpl @Inject constructor(
         .observeAllByPlaylistUrl(playlistUrl)
         .catch { emit(emptyList()) }
 
+    override fun observeStreamKindsByPlaylistUrl(playlistUrl: String): Flow<List<Int>> = channelDao
+        .observeDistinctKindsByPlaylistUrl(playlistUrl)
+        .catch { emit(emptyList()) }
+
     override fun observeRelationIdsByPlaylistUrl(playlistUrl: String): Flow<List<String>> = channelDao
         .observeRelationIdsByPlaylistUrl(playlistUrl)
         .catch { emit(emptyList()) }
@@ -47,13 +54,14 @@ internal class ChannelRepositoryImpl @Inject constructor(
         url: String,
         category: String,
         query: String,
-        sort: Sort
+        sort: Sort,
+        kind: Int?,
     ): PagingSource<Int, Channel> = when (sort) {
-        Sort.UNSPECIFIED -> channelDao.pagingAllByPlaylistUrl(url, category, query)
-        Sort.ASC -> channelDao.pagingAllByPlaylistUrlAsc(url, category, query)
-        Sort.DESC -> channelDao.pagingAllByPlaylistUrlDesc(url, category, query)
-        Sort.RECENTLY -> channelDao.pagingAllByPlaylistUrlRecently(url, category, query)
-        Sort.MIXED -> channelDao.pagingAllByPlaylistUrlMixed(url, query)
+        Sort.UNSPECIFIED -> channelDao.pagingAllByPlaylistUrl(url, category, query, kind)
+        Sort.ASC -> channelDao.pagingAllByPlaylistUrlAsc(url, category, query, kind)
+        Sort.DESC -> channelDao.pagingAllByPlaylistUrlDesc(url, category, query, kind)
+        Sort.RECENTLY -> channelDao.pagingAllByPlaylistUrlRecently(url, category, query, kind)
+        Sort.MIXED -> channelDao.pagingAllByPlaylistUrlMixed(url, query, kind)
     }
 
     override suspend fun get(id: Int): Channel? = channelDao.get(id)
@@ -124,6 +132,18 @@ internal class ChannelRepositoryImpl @Inject constructor(
             val currentVersion = resolveCurrentVersion(selected) ?: return@withExclusive
             val current = kotlin.time.Clock.System.now().toEpochMilliseconds()
             channelDao.updateSeen(currentVersion.id, current)
+            watchHistoryDao.recordWatch(
+                WatchHistory(
+                    channelId = currentVersion.id,
+                    playlistUrl = currentVersion.playlistUrl,
+                    streamUrl = currentVersion.url,
+                    title = currentVersion.title,
+                    category = currentVersion.category,
+                    cover = currentVersion.cover,
+                    kind = currentVersion.kind,
+                    watchedAt = current,
+                )
+            )
         }
     }
 
@@ -165,6 +185,53 @@ internal class ChannelRepositoryImpl @Inject constructor(
 
     override fun observePlayedRecently(): Flow<Channel?> = channelDao.observePlayedRecently()
 
+    override fun observeWatchHistory(limit: Int): Flow<List<WatchHistory>> =
+        watchHistoryDao.observeRecent(limit).catch { emit(emptyList()) }
+
+    override suspend fun updateWatchProgress(
+        streamUrl: String,
+        positionMs: Long,
+        durationMs: Long,
+        channelId: Int?,
+    ) {
+        if (streamUrl.isBlank()) return
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val updated = watchHistoryDao.updateProgress(
+            streamUrl = streamUrl,
+            positionMs = positionMs,
+            durationMs = durationMs,
+            watchedAt = now,
+        )
+        if (updated == 0 && channelId != null) {
+            val parentUrl = channelDao.get(channelId)?.url
+            if (!parentUrl.isNullOrBlank() && parentUrl != streamUrl) {
+                watchHistoryDao.updateProgress(
+                    streamUrl = parentUrl,
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    watchedAt = now,
+                )
+            }
+        }
+    }
+
+    override suspend fun deleteWatchHistory(id: Int) {
+        watchHistoryDao.deleteById(id)
+    }
+
+    override suspend fun restoreWatchHistory(entry: WatchHistory) {
+        watchHistoryDao.insertOrReplace(entry)
+    }
+
+    override suspend fun resolveChannelIdForHistory(entry: WatchHistory): Int? {
+        val existingById = channelDao.get(entry.channelId)
+        if (existingById != null && existingById.url == entry.streamUrl) {
+            return existingById.id
+        }
+        return channelDao.getByPlaylistUrlAndUrl(entry.playlistUrl, entry.streamUrl)?.id
+            ?: existingById?.id
+    }
+
     override fun observeAllUnseenFavorites(limit: Duration): Flow<List<Channel>> =
         channelDao.observeAllUnseenFavorites(
             limit = limit.inWholeMilliseconds,
@@ -198,14 +265,16 @@ internal class ChannelRepositoryImpl @Inject constructor(
     override fun searchByPlaylist(
         playlistUrl: String,
         query: String,
-        hiddenCategories: List<String>
+        hiddenCategories: List<String>,
+        kind: Int?,
     ): PagingSource<Int, Channel> {
         val normalizedQuery = query.trim()
         return channelDao.queryByPlaylist(
             playlistUrl = playlistUrl,
             rawQuery = normalizedQuery,
             escapedQuery = normalizedQuery.escapeForSqlLike(),
-            hiddenCategories = hiddenCategories.ifEmpty { listOf(HIDDEN_CATEGORY_SENTINEL) }
+            hiddenCategories = hiddenCategories.ifEmpty { listOf(HIDDEN_CATEGORY_SENTINEL) },
+            kind = kind,
         )
     }
 }

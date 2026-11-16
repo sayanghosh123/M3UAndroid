@@ -9,6 +9,7 @@ import com.m3u.core.foundation.architecture.preferences.LogLevel
 import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
 import com.m3u.core.foundation.architecture.preferences.Settings
 import com.m3u.core.foundation.architecture.preferences.flowOf
+import com.m3u.data.telemetry.CredentialRedactor
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -46,12 +47,17 @@ class AppLogger @Inject constructor(
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val lock = Any()
+    private val ringLock = Any()
+    private val ringBuffer = ArrayDeque<String>(maxRingBufferEntries)
     private val commands = Channel<LogCommand>(Channel.UNLIMITED)
-    private val logsDir = (
-            context.getExternalFilesDir("logs")
-                ?: File(context.filesDir, "logs")
-            ).apply { mkdirs() }
-    private val exportsDir = File(context.cacheDir, "log-exports").apply { mkdirs() }
+    // Resolved lazily on the IO dispatcher so Hilt creation on the main thread avoids disk I/O.
+    private val logsDir: File by lazy {
+        (context.getExternalFilesDir("logs") ?: File(context.filesDir, "logs"))
+            .apply { mkdirs() }
+    }
+    private val exportsDir: File by lazy {
+        File(context.cacheDir, "log-exports").apply { mkdirs() }
+    }
 
     private val _snapshot = MutableStateFlow(AppLogSnapshot())
     val snapshot: StateFlow<AppLogSnapshot> get() = _snapshot.asStateFlow()
@@ -65,8 +71,14 @@ class AppLogger @Inject constructor(
                 minPriority = it
             }
         }
-        synchronized(lock) {
-            refreshSnapshotLocked()
+        scope.launch {
+            runCatching {
+                synchronized(lock) {
+                    refreshSnapshotLocked()
+                }
+            }.onFailure {
+                Log.e("AppLogger", "Failed to initialize log snapshot", it)
+            }
         }
         scope.launch {
             for (command in commands) {
@@ -117,37 +129,86 @@ class AppLogger @Inject constructor(
         t: Throwable?
     ) {
         if (priority < minPriority) return
-        val result = commands.trySend(
+        val resolvedTag = tag ?: "App"
+        appendRingEntry(
+            priority = priority,
+            tag = resolvedTag,
+            message = message,
+            throwable = t
+        )
+        commands.trySend(
             LogCommand.Write(
                 priority = priority,
-                tag = tag ?: "App",
+                tag = resolvedTag,
                 message = message,
                 throwable = t
             )
         )
-        if (result.isFailure) {
-            synchronized(lock) {
-                writeEntryLocked(
-                    priority = priority,
-                    tag = tag ?: "App",
-                    message = message,
-                    throwable = t
-                )
-            }
-        }
     }
 
+    /**
+     * Records an uncaught or critical failure without acquiring file I/O locks on the caller thread.
+     */
     fun recordException(
         source: String,
         throwable: Throwable
     ) {
-        synchronized(lock) {
-            writeEntryLocked(
+        val message = throwable.message?.takeIf { it.isNotBlank() } ?: source
+        appendRingEntry(
+            priority = Log.ERROR,
+            tag = source,
+            message = message,
+            throwable = throwable
+        )
+        commands.trySend(
+            LogCommand.Write(
                 priority = Log.ERROR,
                 tag = source,
-                message = throwable.message?.takeIf { it.isNotBlank() } ?: source,
+                message = message,
                 throwable = throwable
             )
+        )
+    }
+
+    /**
+     * Returns the most recent redacted log entries from memory without touching disk or file locks.
+     */
+    fun recentEntries(limit: Int = maxRingBufferEntries): List<String> {
+        if (limit <= 0) return emptyList()
+        return synchronized(ringLock) {
+            if (ringBuffer.size <= limit) {
+                ringBuffer.toList()
+            } else {
+                ringBuffer.takeLast(limit)
+            }
+        }
+    }
+
+    private fun appendRingEntry(
+        priority: Int,
+        tag: String,
+        message: String,
+        throwable: Throwable?
+    ) {
+        val raw = buildString {
+            append(timestampFormatter.format(ZonedDateTime.now()))
+            append(' ')
+            append(priorityLabel(priority))
+            append('/')
+            append(tag)
+            append(": ")
+            append(message)
+            throwable?.let {
+                append('\n')
+                append(it.toStackTraceString().trimEnd())
+            }
+        }
+        val redacted = CredentialRedactor.redact(raw)
+        synchronized(ringLock) {
+            while (ringBuffer.size >= maxRingBufferEntries) {
+                ringBuffer.removeFirst()
+            }
+            ringBuffer.addLast(redacted)
         }
     }
 
@@ -343,6 +404,7 @@ class AppLogger @Inject constructor(
         private const val maxLogFiles = 7
         private const val maxExportFiles = 3
         private const val maxLogFileBytes = 1024 * 1024L
+        private const val maxRingBufferEntries = 150
         private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS Z")
         private val fileTimestampFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
     }

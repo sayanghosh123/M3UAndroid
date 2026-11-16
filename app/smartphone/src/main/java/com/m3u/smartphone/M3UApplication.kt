@@ -37,17 +37,29 @@ class M3UApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectAll()
+                    .penaltyLog()
+                    .build()
+            )
             Timber.plant(DebugTree())
         }
         Timber.plant(appLogger)
         GoogleCastBootstrap.initialize(this)
+        val telemetryEntryPoint = com.m3u.smartphone.telemetry.SmartphoneTelemetryEntryPoint.from(this)
+        val telemetryCoordinator = telemetryEntryPoint.telemetryCoordinator()
+        val mainThreadWatchdog = telemetryEntryPoint.mainThreadWatchdog()
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             runCatching {
                 appLogger.recordException("uncaught-${thread.name}", throwable)
+                telemetryCoordinator.captureUncaughtException(thread, throwable)
             }
             previousHandler?.uncaughtException(thread, throwable)
         }
+        mainThreadWatchdog.start()
+        telemetryCoordinator.schedulePendingUploadsAsync()
         initializePersistedUriPermissionLeases(this)
         val workManager = WorkManager.getInstance(this)
         PersistedUriPermissionCleanupWorker.enqueueRecovery(

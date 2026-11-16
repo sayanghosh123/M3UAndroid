@@ -55,7 +55,6 @@ class ChromecastViewModel @Inject constructor(
                 return
             }
 
-            is CastValidation.Warning -> emitMessage(validation.messageResId)
             CastValidation.Ready -> Unit
         }
         onOpenDialog()
@@ -89,7 +88,6 @@ class ChromecastViewModel @Inject constructor(
                         return@collect
                     }
 
-                    is CastValidation.Warning -> emitMessage(validation.messageResId)
                     CastValidation.Ready -> Unit
                 }
 
@@ -119,15 +117,15 @@ class ChromecastViewModel @Inject constructor(
     }
 
     private fun validate(channel: Channel, playlist: Playlist?): CastValidation {
-        val streamUri = channel.url.toUri()
-        if (streamUri.scheme !in setOf("http", "https")) {
-            return CastValidation.Blocked(string.feat_channel_cast_error_non_http)
+        if (channel.url != Channel.URL_DYNAMIC) {
+            val cleanUrl = channel.url.substringBefore('|')
+            val streamUri = cleanUrl.toUri()
+            if (streamUri.scheme?.lowercase() !in setOf("http", "https")) {
+                return CastValidation.Blocked(string.feat_channel_cast_error_non_http)
+            }
         }
         if (!channel.licenseKey.isNullOrBlank()) {
             return CastValidation.Blocked(string.feat_channel_cast_error_drm)
-        }
-        if (!playlist?.userAgent.isNullOrBlank()) {
-            return CastValidation.Warning(string.feat_channel_cast_warning_user_agent)
         }
         return CastValidation.Ready
     }
@@ -145,6 +143,5 @@ private data class CastRequest(
 
 private sealed interface CastValidation {
     data object Ready : CastValidation
-    data class Warning(@param:StringRes val messageResId: Int) : CastValidation
     data class Blocked(@param:StringRes val messageResId: Int) : CastValidation
 }

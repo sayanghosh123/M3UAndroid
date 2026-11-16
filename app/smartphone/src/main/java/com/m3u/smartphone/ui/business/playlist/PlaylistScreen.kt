@@ -25,7 +25,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.KeyboardDoubleArrowUp
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -62,7 +66,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.PagingData
 import com.google.accompanist.permissions.rememberPermissionState
 import com.m3u.business.playlist.ChannelWithProgramme
+import com.m3u.business.playlist.PlaylistMediaSection
 import com.m3u.business.playlist.PlaylistViewModel
+import com.m3u.data.database.model.StreamKind
 import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
 import com.m3u.core.foundation.architecture.preferences.mutablePreferenceOf
 import com.m3u.core.foundation.architecture.preferences.preferenceOf
@@ -134,6 +140,8 @@ internal fun PlaylistRoute(
 
     val isSeriesPlaylist by remember { derivedStateOf { playlist?.isSeries ?: false } }
     val isVodPlaylist by remember { derivedStateOf { playlist?.isVod ?: false } }
+    val mediaSections by viewModel.mediaSections.collectAsStateWithLifecycle()
+    val effectiveStreamKind by viewModel.effectiveStreamKind.collectAsStateWithLifecycle()
 
     val sorts = Sort.entries
     val sort by viewModel.sort.collectAsStateWithLifecycle()
@@ -185,18 +193,32 @@ internal fun PlaylistRoute(
             sort = sort,
             refreshing = refreshing,
             contentPadding = contentPadding,
-            isVodPlaylist = isVodPlaylist,
+            isVodPlaylist = isVodPlaylist ||
+                effectiveStreamKind == StreamKind.MOVIE ||
+                effectiveStreamKind == StreamKind.SERIES,
             isSeriesPlaylist = isSeriesPlaylist,
+            mediaSections = mediaSections,
         ),
         actions = PlaylistScreenActions(
             onPinOrUnpinCategory = { viewModel.onPinOrUnpinCategory(it) },
             onHideCategory = { viewModel.onHideCategory(it) },
             onSort = { viewModel.sort(it) },
+            onSelectMediaSection = { viewModel.selectMediaSection(it) },
             onPlayChannel = { channel ->
                 if (!isSeriesPlaylist) {
                     coroutineScope.launch {
-                        helper.play(MediaCommand.Common(channel.id))
-                        navigateToChannel()
+                        if (helper.play(MediaCommand.Common(channel.id))) {
+                            navigateToChannel()
+                        }
+                    }
+                } else {
+                    viewModel.series.value = channel
+                }
+            },
+            onOpenInExternalPlayer = { channel ->
+                if (!isSeriesPlaylist) {
+                    coroutineScope.launch {
+                        helper.openInExternalPlayer(MediaCommand.Common(channel.id))
                     }
                 } else {
                     viewModel.series.value = channel
@@ -271,8 +293,9 @@ internal fun PlaylistRoute(
                             channelId = it.id,
                             episode = episode
                         )
-                        helper.play(input)
-                        navigateToChannel()
+                        if (helper.play(input)) {
+                            navigateToChannel()
+                        }
                     }
                 }
             },
@@ -297,13 +320,16 @@ private data class PlaylistScreenState(
     val contentPadding: PaddingValues,
     val isVodPlaylist: Boolean,
     val isSeriesPlaylist: Boolean,
+    val mediaSections: List<PlaylistMediaSection>,
 )
 
 private data class PlaylistScreenActions(
     val onPinOrUnpinCategory: (String) -> Unit,
     val onHideCategory: (String) -> Unit,
     val onSort: (Sort) -> Unit,
+    val onSelectMediaSection: (Int?) -> Unit,
     val onPlayChannel: (Channel) -> Unit,
+    val onOpenInExternalPlayer: (Channel) -> Unit,
     val onScrollUp: () -> Unit,
     val onRefresh: () -> Unit,
     val favourite: (channelId: Int) -> Unit,
@@ -471,6 +497,31 @@ private fun PlaylistScreen(
             .padding(state.contentPadding.minus(state.contentPadding.only(WindowInsetsSides.Bottom)))
             .then(modifier)
     ) {
+        if (state.mediaSections.isNotEmpty()) {
+            val spacing = LocalSpacing.current
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                contentPadding = PaddingValues(horizontal = spacing.medium, vertical = spacing.extraSmall),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                items(
+                    items = state.mediaSections,
+                    key = { it.kind ?: -1 },
+                ) { section ->
+                    val labelRes = when (section.kind) {
+                        StreamKind.LIVE -> string.feat_playlist_media_live
+                        StreamKind.MOVIE -> string.feat_playlist_media_movies
+                        StreamKind.SERIES -> string.feat_playlist_media_series
+                        else -> string.feat_playlist_media_all
+                    }
+                    FilterChip(
+                        selected = section.selected,
+                        onClick = { actions.onSelectMediaSection(section.kind) },
+                        label = { Text(stringResource(labelRes)) },
+                    )
+                }
+            }
+        }
         val showTabsOnly = isExpanded && categories.size > 1
         if (!showTabsOnly) {
             AnimatedVisibility(
@@ -515,6 +566,10 @@ private fun PlaylistScreen(
         },
         onCreateShortcut = { channel ->
             actions.createShortcut(channel.id)
+            mediaSheetValue = MediaSheetValue.PlaylistScreen()
+        },
+        onOpenInExternalPlayer = { channel ->
+            actions.onOpenInExternalPlayer(channel)
             mediaSheetValue = MediaSheetValue.PlaylistScreen()
         },
         onDismissRequest = { mediaSheetValue = MediaSheetValue.PlaylistScreen() }

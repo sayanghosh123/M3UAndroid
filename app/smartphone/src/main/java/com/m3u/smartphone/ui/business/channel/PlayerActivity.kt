@@ -90,7 +90,9 @@ class PlayerActivity : AppCompatActivity() {
                 // series can not be played from shortcuts
                 playlist?.isSeries == true -> {}
                 else -> {
-                    helper.play(MediaCommand.Common(channel.id))
+                    if (!helper.play(MediaCommand.Common(channel.id))) {
+                        finish()
+                    }
                 }
             }
         }

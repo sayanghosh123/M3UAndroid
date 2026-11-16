@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Archive
@@ -135,6 +136,7 @@ fun ChannelMask(
     onSpeedEnd: () -> Unit,
     onFavorite: () -> Unit,
     openDlnaDevices: () -> Unit,
+    openInExternalPlayer: () -> Unit,
     openChooseFormat: () -> Unit,
     openOrClosePanel: () -> Unit,
     onEnterPipMode: () -> Unit,
@@ -340,6 +342,15 @@ fun ChannelMask(
                         icon = Icons.Rounded.Cast,
                         onClick = openDlnaDevices,
                         contentDescription = stringResource(string.feat_channel_tooltip_cast)
+                    )
+                }
+                if (supportsDirectSharing) {
+                    MaskButton(
+                        state = maskState,
+                        icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                        onClick = openInExternalPlayer,
+                        contentDescription = stringResource(string.feat_channel_tooltip_open_external),
+                        wakeWhenClicked = false,
                     )
                 }
                 if (playerState.videoSize.isNotEmpty) {

@@ -8,6 +8,7 @@ import androidx.room.Query
 import com.m3u.data.database.model.Programme
 import com.m3u.data.database.model.ProgrammeRange
 import com.m3u.data.database.model.ProgrammeSearchResult
+import com.m3u.data.database.model.SportsProgrammeCandidate
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -96,6 +97,37 @@ interface ProgrammeDao {
         windowStart: Long,
         windowEnd: Long,
     ): Flow<List<ProgrammeSearchResult>>
+
+    @Query(
+        """
+        SELECT p.relation_id AS programme_relation_id,
+               p.epg_url AS programme_epg_url,
+               p.start AS programme_start,
+               p.`end` AS programme_end,
+               p.title AS programme_title,
+               p.description AS programme_description,
+               p.icon AS programme_icon,
+               p.categories AS programme_categories,
+               p.id AS programme_id,
+               s.id AS channel_database_id,
+               s.title AS channel_title,
+               s.`group` AS channel_group,
+               s.url AS channel_url,
+               pl.title AS playlist_title,
+               s.playlist_url AS playlist_url
+        FROM programmes p
+        JOIN streams s ON s.relation_id = p.relation_id
+        JOIN playlists pl ON pl.url = s.playlist_url
+        WHERE p.start <= :windowEnd AND p.`end` >= :windowStart
+          AND s.hidden = 0
+          AND (pl.epg_urls LIKE '%' || p.epg_url || '%' OR pl.source = 'xtream')
+        ORDER BY p.start ASC
+        """
+    )
+    fun observeSportsProgrammesInWindow(
+        windowStart: Long,
+        windowEnd: Long,
+    ): Flow<List<SportsProgrammeCandidate>>
 
     @Query("DELETE FROM programmes WHERE epg_url = :epgUrl")
     suspend fun cleanByEpgUrl(epgUrl: String)

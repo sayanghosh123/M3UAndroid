@@ -18,8 +18,16 @@ interface PlaylistRepository {
     suspend fun getAll(): List<Playlist>
     suspend fun getAllAutoRefresh(): List<Playlist>
     suspend fun getBySource(source: DataSource): List<Playlist>
-    suspend fun getCategoriesByPlaylistUrlIgnoreHidden(url: String, query: String): List<String>
-    fun observeCategoriesByPlaylistUrlIgnoreHidden(url: String, query: String): Flow<List<String>>
+    suspend fun getCategoriesByPlaylistUrlIgnoreHidden(
+        url: String,
+        query: String,
+        kind: Int? = null,
+    ): List<String>
+    fun observeCategoriesByPlaylistUrlIgnoreHidden(
+        url: String,
+        query: String,
+        kind: Int? = null,
+    ): Flow<List<String>>
     fun observe(url: String): Flow<Playlist?>
     fun observePlaylistWithChannels(url: String): Flow<PlaylistWithChannels?>
     suspend fun getPlaylistWithChannels(url: String): PlaylistWithChannels?

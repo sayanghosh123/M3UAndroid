@@ -581,8 +581,9 @@ private fun AppContent(
                     isVodOrSeriesPlaylist = false,
                     onClick = { channel ->
                         coroutineScope.launch {
-                            helper.play(MediaCommand.Common(channel.id))
-                            navigateToChannel()
+                            if (helper.play(MediaCommand.Common(channel.id))) {
+                                navigateToChannel()
+                            }
                         }
                     },
                     onLongClick = {},

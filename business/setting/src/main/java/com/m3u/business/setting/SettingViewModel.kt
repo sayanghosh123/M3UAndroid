@@ -52,6 +52,8 @@ import com.m3u.data.repository.tv.TvRepository
 import com.m3u.data.service.AppLogSnapshot
 import com.m3u.data.service.AppLogger
 import com.m3u.data.service.Messager
+import com.m3u.data.telemetry.TelemetryCoordinator
+import com.m3u.data.telemetry.TelemetryStatusSnapshot
 import com.m3u.data.worker.BackupWorker
 import com.m3u.data.worker.RestoreWorker
 import com.m3u.data.worker.SubscriptionWorker
@@ -95,6 +97,7 @@ class SettingViewModel @Inject constructor(
     private val settings: Settings,
     private val messager: Messager,
     private val appLogger: AppLogger,
+    private val telemetryCoordinator: TelemetryCoordinator,
     private val tvRepository: TvRepository,
     private val tvApi: TvApiDelegate,
     private val codecPackRepository: CodecPackRepository,
@@ -1487,6 +1490,32 @@ class SettingViewModel @Inject constructor(
     private val model: String = publisher.model
 
     val properties = SettingProperties()
+
+    val telemetryStatus: StateFlow<TelemetryStatusSnapshot> = telemetryCoordinator.status
+
+    suspend fun importTelemetryServiceAccount(rawJson: String): Result<String> =
+        telemetryCoordinator.importServiceAccountJson(rawJson)
+
+    fun clearTelemetryServiceAccount() {
+        viewModelScope.launch {
+            telemetryCoordinator.clearServiceAccount()
+        }
+    }
+
+    suspend fun captureTestDiagnosticTelemetry(): Boolean =
+        telemetryCoordinator.captureManualDiagnostic()
+
+    fun triggerTelemetryUploadNow() {
+        viewModelScope.launch {
+            telemetryCoordinator.triggerUploadNow()
+        }
+    }
+
+    fun refreshTelemetryStatus() {
+        viewModelScope.launch {
+            telemetryCoordinator.refreshStatus()
+        }
+    }
 
     suspend fun prepareLogEmail(recipient: String): LogEmailDraft? {
         val trimmed = recipient.trim()

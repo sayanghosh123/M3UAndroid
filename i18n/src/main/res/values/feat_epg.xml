@@ -10,4 +10,21 @@
     <string name="feat_epg_events_cleared">Imported events cleared</string>
     <string name="feat_epg_events_import_result">%1$d of %2$d events imported; %3$d could not be matched</string>
     <string name="feat_epg_import_failed">The import file could not be read</string>
+    <string name="feat_epg_preset_football">Football</string>
+    <string name="feat_epg_preset_all_sports">All sports</string>
+    <string name="feat_epg_preset_basketball">Basketball</string>
+    <string name="feat_epg_preset_motorsport">Motorsport</string>
+    <string name="feat_epg_preset_combat">UFC &amp; Boxing</string>
+    <string name="feat_epg_preset_tennis">Tennis</string>
+    <string name="feat_epg_preset_cricket">Cricket</string>
+    <string name="feat_epg_sports_live_badge">LIVE</string>
+    <string name="feat_epg_sports_unscheduled">Live channel</string>
+    <string name="feat_epg_sports_sources_count">%d feeds</string>
+    <string name="feat_epg_sports_cast">Cast to TV</string>
+    <string name="feat_epg_sports_watch">Watch</string>
+    <string name="feat_epg_sports_external">Open in external player</string>
+    <string name="feat_epg_sports_empty">No matching live or upcoming fixtures found. Make sure your sports playlists or EPG guides are synced.</string>
+    <string name="feat_epg_sports_casting_started">Casting %1$s to %2$s</string>
+    <string name="feat_epg_sports_cast_failed">Unable to start Cast playback</string>
+    <string name="feat_epg_sports_cast_select_device">Choose a Chromecast device to watch %s</string>
 </resources>

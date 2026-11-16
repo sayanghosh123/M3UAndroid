@@ -80,6 +80,7 @@ import com.m3u.data.repository.plugin.InstalledPlugin
 import com.m3u.data.repository.plugin.PluginAuthorizationToken
 import com.m3u.data.repository.provider.ProviderAccountSummary
 import com.m3u.data.service.AppLogSnapshot
+import com.m3u.data.telemetry.TelemetryStatusSnapshot
 import com.m3u.data.worker.abandonPersistedUriPermissionLease
 import com.m3u.data.worker.beginPersistedUriPermissionLease
 import com.m3u.i18n.R.string
@@ -115,8 +116,10 @@ import com.m3u.smartphone.ui.material.model.LocalHazeState
 import com.m3u.smartphone.ui.navigation.AppNavigationMode
 import com.m3u.smartphone.ui.navigation.resolveAppNavigationMode
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingRoute(
@@ -140,6 +143,7 @@ fun SettingRoute(
     val hiddenCategoriesWithPlaylists by viewModel.hiddenCategoriesWithPlaylists.collectAsStateWithLifecycle()
     val backingUpOrRestoring by viewModel.backingUpOrRestoring.collectAsStateWithLifecycle()
     val logSnapshot by viewModel.logSnapshot.collectAsStateWithLifecycle()
+    val telemetryStatus by viewModel.telemetryStatus.collectAsStateWithLifecycle()
     val codecPackState by viewModel.codecPackState.collectAsStateWithLifecycle()
     val extensionPluginDiscoveryState by
         viewModel.extensionPluginDiscoveryState.collectAsStateWithLifecycle()
@@ -210,6 +214,45 @@ fun SettingRoute(
                 Toast.makeText(context, fileAccessFailure, Toast.LENGTH_LONG).show()
             }
         }
+    val importTelemetryKeyLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@rememberLauncherForActivityResult
+            coroutineScope.launch {
+                val rawJson = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            stream.bufferedReader(Charsets.UTF_8).readText()
+                        }
+                    }.getOrNull()
+                }
+                if (rawJson.isNullOrBlank()) {
+                    Toast.makeText(
+                        context,
+                        context.getString(string.feat_setting_telemetry_import_failed, "Empty file"),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                viewModel.importTelemetryServiceAccount(rawJson)
+                    .onSuccess { email ->
+                        Toast.makeText(
+                            context,
+                            context.getString(string.feat_setting_telemetry_import_success, email),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                    .onFailure { error ->
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                string.feat_setting_telemetry_import_failed,
+                                error.message ?: "Invalid JSON",
+                            ),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+            }
+        }
 
     val backup = {
         val filename = context.getString(
@@ -252,6 +295,22 @@ fun SettingRoute(
             versionCode = viewModel.versionCode,
             backingUpOrRestoring = backingUpOrRestoring,
             logSnapshot = logSnapshot,
+        telemetryStatus = telemetryStatus,
+        onImportTelemetryKey = { importTelemetryKeyLauncher.launch(arrayOf("application/json", "*/*")) },
+        onClearTelemetryKey = viewModel::clearTelemetryServiceAccount,
+        onTriggerTelemetryUpload = viewModel::triggerTelemetryUploadNow,
+        onSendTestTelemetry = {
+            coroutineScope.launch {
+                val queued = viewModel.captureTestDiagnosticTelemetry()
+                if (queued) {
+                    Toast.makeText(
+                        context,
+                        context.getString(string.feat_setting_telemetry_test_queued),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        },
             codecPackState = codecPackState,
             playlists = playlists,
             playlistSubscriptionInProgress = playlistSubscriptionInProgress,
@@ -343,6 +402,11 @@ private fun SettingScreen(
     versionCode: Int,
     backingUpOrRestoring: BackingUpAndRestoringState,
     logSnapshot: AppLogSnapshot,
+    telemetryStatus: TelemetryStatusSnapshot,
+    onImportTelemetryKey: () -> Unit,
+    onClearTelemetryKey: () -> Unit,
+    onTriggerTelemetryUpload: () -> Unit,
+    onSendTestTelemetry: () -> Unit,
     codecPackState: CodecPackState,
     playlists: Map<Playlist, Int>?,
     playlistSubscriptionInProgress: Boolean,
@@ -1055,8 +1119,13 @@ private fun SettingScreen(
                 SettingDestination.Logging -> {
                     LoggingFragment(
                         logSnapshot = logSnapshot,
+                        telemetryStatus = telemetryStatus,
                         sendLogs = sendLogs,
                         clearLogs = clearLogs,
+                        onImportTelemetryKey = onImportTelemetryKey,
+                        onClearTelemetryKey = onClearTelemetryKey,
+                        onTriggerTelemetryUpload = onTriggerTelemetryUpload,
+                        onSendTestTelemetry = onSendTestTelemetry,
                         contentPadding = contentPadding,
                         modifier = Modifier.fillMaxSize()
                     )

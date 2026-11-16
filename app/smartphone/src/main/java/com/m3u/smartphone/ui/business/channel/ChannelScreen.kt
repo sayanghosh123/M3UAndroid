@@ -1,7 +1,6 @@
 package com.m3u.smartphone.ui.business.channel
 
 import android.Manifest
-import android.content.Intent
 import android.graphics.Rect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,12 +25,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
@@ -40,7 +39,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.takeOrElse
 import androidx.compose.ui.util.fastRoundToInt
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +56,7 @@ import com.m3u.core.foundation.util.basic.title
 import com.m3u.data.database.model.AdjacentChannels
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
+import com.m3u.data.service.MediaCommand
 import com.m3u.i18n.R.string
 import com.m3u.smartphone.ui.business.channel.components.DlnaDevicesBottomSheet
 import com.m3u.smartphone.ui.business.channel.components.FormatsBottomSheet
@@ -81,6 +80,7 @@ import com.m3u.smartphone.ui.material.ktx.checkPermissionOrRationale
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -89,10 +89,9 @@ fun ChannelRoute(
     viewModel: ChannelViewModel = hiltViewModel(),
 ) {
     val googleCastViewModel: ChromecastViewModel = hiltViewModel()
-    val openInExternalPlayerString = stringResource(string.feat_channel_open_in_external_app)
 
     val helper = LocalHelper.current
-    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val windowInfo = LocalWindowInfo.current
 
@@ -291,6 +290,13 @@ fun ChannelRoute(
                     viewModel.openDlnaDevices()
                     pullPanelLayoutState.collapse()
                 },
+                openInExternalPlayer = {
+                    val activeChannel = channel ?: return@ChannelPlayer
+                    pullPanelLayoutState.collapse()
+                    coroutineScope.launch {
+                        helper.openInExternalPlayer(MediaCommand.Common(activeChannel.id))
+                    }
+                },
                 openChooseFormat = {
                     choosing = true
                     pullPanelLayoutState.collapse()
@@ -361,15 +367,11 @@ fun ChannelRoute(
             googleCastViewModel.openGoogleCastDevices(launcher)
         },
         openInExternalPlayer = {
-            val channelUrl = channel
-                ?.url
-                ?.takeUnless { url -> url == Channel.URL_DYNAMIC }
-                ?: return@DlnaDevicesBottomSheet
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(channelUrl.toUri(), "video/*")
-                }.let { Intent.createChooser(it, openInExternalPlayerString.title()) }
-            )
+            val activeChannel = channel ?: return@DlnaDevicesBottomSheet
+            viewModel.closeDlnaDevices()
+            coroutineScope.launch {
+                helper.openInExternalPlayer(MediaCommand.Common(activeChannel.id))
+            }
         },
         onDismiss = { viewModel.closeDlnaDevices() }
     )
@@ -425,6 +427,7 @@ private fun ChannelPlayer(
     onResetPlayback: () -> Unit,
     onFavorite: () -> Unit,
     openDlnaDevices: () -> Unit,
+    openInExternalPlayer: () -> Unit,
     openChooseFormat: () -> Unit,
     openOrClosePanel: () -> Unit,
     onVolume: (Float) -> Unit,
@@ -523,6 +526,7 @@ private fun ChannelPlayer(
             isPanelExpanded = isPanelExpanded,
             onFavorite = onFavorite,
             openDlnaDevices = openDlnaDevices,
+            openInExternalPlayer = openInExternalPlayer,
             openChooseFormat = openChooseFormat,
             openOrClosePanel = openOrClosePanel,
             onVolume = onVolume,

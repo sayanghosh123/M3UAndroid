@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.net.Uri
+import android.os.Build
 import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -16,10 +17,13 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.rtmp.RtmpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.MediaExtractorCompat
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
@@ -67,13 +71,16 @@ import com.m3u.data.repository.provider.ProviderOperationException
 import com.m3u.data.repository.provider.ProviderPlaybackCloseReason
 import com.m3u.data.repository.provider.ProviderPlaybackSession
 import com.m3u.data.repository.provider.SubscriptionProviderRepository
+import com.m3u.data.service.ExternalPlaybackTarget
 import com.m3u.data.service.MediaCommand
 import com.m3u.data.service.PlayerManager
+import com.m3u.data.service.PlayerTelemetrySnapshot
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.ktor.http.Url
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -112,7 +119,7 @@ class PlayerManagerImpl @Inject constructor(
     private val subscriptionProviderRepository: SubscriptionProviderRepository,
     private val cache: Cache,
     private val settings: Settings,
-    publisher: Publisher,
+    private val publisher: Publisher,
 ) : PlayerManager, MediaSession.Callback {
     private val timber = Timber.tag("PlayerManagerImpl")
     private val mainCoroutineScope = CoroutineScope(Dispatchers.Main)
@@ -135,9 +142,17 @@ class PlayerManagerImpl @Inject constructor(
     private val playerLifecycleLock = Any()
     private var activePlayerListener: Player.Listener? = null
     private var activePlayerGeneration: Long? = null
+    private var activeUserAgent: String? = null
     private var activeRequestHeaders: Map<String, String> = emptyMap()
     private var activeProviderPlayback = false
     private var activeProviderPlaybackAllowsCrossOrigin = false
+    private var preferSoftwareDecoder = false
+    private var transientRetryAttempt = 0
+    private var behindLiveWindowAttempts = 0
+    private var reconnectRetryJob: Job? = null
+
+    private fun defaultUserAgent(): String =
+        "M3UAndroid/${publisher.versionName} (Android ${Build.VERSION.RELEASE})"
 
     override val playlist: StateFlow<Playlist?> = mediaCommand.flatMapLatest { command ->
         when (command) {
@@ -185,9 +200,11 @@ class PlayerManagerImpl @Inject constructor(
     override val playbackState = MutableStateFlow<@Player.State Int>(Player.STATE_IDLE)
     override val playbackException = MutableStateFlow<PlaybackException?>(null)
     override val isPlaying = MutableStateFlow(false)
+    override val telemetrySnapshot = MutableStateFlow(PlayerTelemetrySnapshot())
     override val tracksGroups = MutableStateFlow<List<Tracks.Group>>(emptyList())
 
     private val playbackPosition = MutableStateFlow(-1L)
+    private val playbackDuration = MutableStateFlow(-1L)
     private val playbackStateEvent = MutableStateFlow(
         PlaybackStateEvent(
             generation = 0L,
@@ -209,9 +226,16 @@ class PlayerManagerImpl @Inject constructor(
             }
         }
         mainCoroutineScope.launch {
+            var telemetrySampleTick = 0
             while (true) {
                 ensureActive()
-                playbackPosition.value = player.value?.currentPosition ?: -1L
+                val activePlayer = player.value
+                playbackPosition.value = activePlayer?.currentPosition ?: -1L
+                playbackDuration.value = activePlayer?.duration?.takeIf { it > 0L } ?: -1L
+                telemetrySampleTick++
+                if (activePlayer != null && telemetrySampleTick % 2 == 0) {
+                    updateBufferMetricsSnapshot(activePlayer)
+                }
                 delay(1.seconds)
             }
         }
@@ -274,6 +298,8 @@ class PlayerManagerImpl @Inject constructor(
             val channelUrl = providerSource?.url
                 ?: channel.url.takeUnless { url -> url == Channel.URL_DYNAMIC }
                 ?: throw ProviderOperationException("Dynamic playback reference was not found")
+            val kodiMetadata = PlaybackResilience.parseKodiUrl(channelUrl)
+            val cleanUrl = kodiMetadata.cleanUrl
             val attachment = providerSessionState.attach(
                 generation = generation,
                 session = providerSource?.session,
@@ -283,15 +309,9 @@ class PlayerManagerImpl @Inject constructor(
                 reason = ProviderPlaybackCloseReason.CHANNEL_CHANGED,
             )
             if (!attachment.accepted) return
-            val sourceAccepted = providerSessionState.runIfCurrent(generation) {
-                activeRequestHeaders = providerSource?.headers.orEmpty()
-                activeProviderPlayback = providerSource != null
-                activeProviderPlaybackAllowsCrossOrigin =
-                    providerSource?.allowCrossOriginRequests == true
-            }
-            if (!sourceAccepted) return
             try {
-                val channelPreference = getChannelPreference(channelUrl)
+                val channelPreference = getChannelPreference(cleanUrl)
+                    ?: getChannelPreference(channelUrl)
                 if (!providerSessionState.isCurrent(generation)) return
                 val licenseType = channel.licenseType.orEmpty()
                 val licenseKey = channel.licenseKey.orEmpty()
@@ -301,22 +321,31 @@ class PlayerManagerImpl @Inject constructor(
 
                 val playlist = playlistRepository.get(channel.playlistUrl)
                 if (!providerSessionState.isCurrent(generation)) return
-                val userAgent = getUserAgent(channelUrl, playlist)
-
-                val chainAccepted = providerSessionState.runIfCurrent(generation) {
+                val resolvedHeaders = PlaybackResilience.resolvePlaybackHeaders(
+                    kodi = kodiMetadata,
+                    playlistUserAgent = playlist?.userAgent,
+                    providerHeaders = providerSource?.headers.orEmpty(),
+                    fallbackUserAgent = defaultUserAgent(),
+                )
+                val sourceAccepted = providerSessionState.runIfCurrent(generation) {
+                    activeUserAgent = resolvedHeaders.userAgent
+                    activeRequestHeaders = resolvedHeaders.headers
+                    activeProviderPlayback = providerSource != null
+                    activeProviderPlaybackAllowsCrossOrigin =
+                        providerSource?.allowCrossOriginRequests == true
                     this.chain = channelPreference?.mineType
-                        ?.let { MimetypeChain.Remembered(channelUrl, it) }
-                        ?: MimetypeChain.Unspecified(channelUrl)
+                        ?.let { MimetypeChain.Remembered(cleanUrl, it) }
+                        ?: MimetypeChain.Unspecified(cleanUrl)
                 }
-                if (!chainAccepted) return
+                if (!sourceAccepted) return
 
                 timber.d("init mimetype chain: ${chain::class.simpleName}")
 
                 tryPlay(
                     generation = generation,
-                    url = channelUrl,
-                    userAgent = userAgent,
-                    requestHeaders = activeRequestHeaders,
+                    url = cleanUrl,
+                    userAgent = resolvedHeaders.userAgent,
+                    requestHeaders = resolvedHeaders.headers,
                     licenseType = licenseType,
                     licenseKey = licenseKey,
                     applyContinueWatching = applyContinueWatching
@@ -341,7 +370,7 @@ class PlayerManagerImpl @Inject constructor(
     private suspend fun tryPlay(
         generation: Long,
         url: String = chain.url,
-        userAgent: String? = getUserAgent(chain.url, playlist.value),
+        userAgent: String? = activeUserAgent ?: getUserAgent(chain.url, playlist.value),
         requestHeaders: Map<String, String> = activeRequestHeaders,
         providerPlayback: Boolean = activeProviderPlayback,
         providerPlaybackAllowsCrossOrigin: Boolean = activeProviderPlaybackAllowsCrossOrigin,
@@ -513,7 +542,13 @@ class PlayerManagerImpl @Inject constructor(
 
     private fun releasePlayer() {
         synchronized(playerLifecycleLock) {
+            reconnectRetryJob?.cancel()
+            reconnectRetryJob = null
+            preferSoftwareDecoder = false
+            transientRetryAttempt = 0
+            behindLiveWindowAttempts = 0
             extractor = null
+            activeUserAgent = null
             activeRequestHeaders = emptyMap()
             activeProviderPlayback = false
             activeProviderPlaybackAllowsCrossOrigin = false
@@ -523,16 +558,21 @@ class PlayerManagerImpl @Inject constructor(
             isPlaying.value = false
             playbackException.value = null
             tracksGroups.value = emptyList()
+            telemetrySnapshot.value = PlayerTelemetrySnapshot()
             chain = MimetypeChain.Unsupported("")
-            player.value?.let { activePlayer ->
-                activePlayerListener?.let(activePlayer::removeListener)
-                activePlayer.stop()
-                activePlayer.release()
-            }
-            activePlayerListener = null
-            activePlayerGeneration = null
-            player.value = null
+            releaseActivePlayerInstanceLocked()
         }
+    }
+
+    private fun releaseActivePlayerInstanceLocked() {
+        player.value?.let { activePlayer ->
+            activePlayerListener?.let(activePlayer::removeListener)
+            activePlayer.stop()
+            activePlayer.release()
+        }
+        activePlayerListener = null
+        activePlayerGeneration = null
+        player.value = null
     }
 
     override fun clearCache() {
@@ -615,7 +655,8 @@ class PlayerManagerImpl @Inject constructor(
         listener: Player.Listener,
     ): ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(mediaSourceFactory)
-        .setRenderersFactory(renderersFactory)
+        .setRenderersFactory(createRenderersFactory())
+        .setLoadControl(createLiveLoadControl())
         .setTrackSelector(createTrackSelector(tunneling))
         .setHandleAudioBecomingNoisy(true)
         .build()
@@ -628,6 +669,25 @@ class PlayerManagerImpl @Inject constructor(
             playWhenReady = true
             addListener(listener)
         }
+
+    /**
+     * Tunes buffering for live IPTV streams: fast 1.5s initial playback start with a 15s-50s
+     * forward buffer, 3s rebuffer hysteresis, and a 10s back buffer.
+     */
+    private fun createLiveLoadControl(): LoadControl =
+        DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 50_000,
+                /* bufferForPlaybackMs = */ 1_500,
+                /* bufferForPlaybackAfterRebufferMs = */ 3_000,
+            )
+            .setBackBuffer(
+                /* backBufferDurationMs = */ 10_000,
+                /* retainBackBufferFromKeyframe = */ true,
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
 
     private fun preparePlayer(
         generation: Long,
@@ -686,9 +746,11 @@ class PlayerManagerImpl @Inject constructor(
             }
         }
 
-    private val renderersFactory: RenderersFactory by lazy {
-        Codecs.createRenderersFactory(context)
-    }
+    private fun createRenderersFactory(): RenderersFactory =
+        Codecs.createRenderersFactory(
+            context = context,
+            preferExtensionDecoder = preferSoftwareDecoder,
+        )
 
     private fun createTrackSelector(tunneling: Boolean): TrackSelector {
         return DefaultTrackSelector(context).apply {
@@ -707,7 +769,7 @@ class PlayerManagerImpl @Inject constructor(
         providerPlayback: Boolean,
         providerPlaybackAllowsCrossOrigin: Boolean,
     ): DataSource.Factory {
-        val client = if (providerPlayback) {
+        val baseClient = if (providerPlayback) {
             providerOkHttpClient.withProviderPlaybackHeaders(
                 entryUrl = url,
                 headers = requestHeaders,
@@ -716,17 +778,19 @@ class PlayerManagerImpl @Inject constructor(
         } else {
             okHttpClient
         }
+        val client = if (providerPlayback) {
+            baseClient
+        } else {
+            baseClient.newBuilder()
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .build()
+        }
         val upstream = OkHttpDataSource.Factory(client)
             .setUserAgent(userAgent)
         if (!providerPlayback) {
             upstream.setDefaultRequestProperties(requestHeaders)
         }
-//        return if (cache) {
-//            CacheDataSource.Factory()
-//                .setUpstreamDataSourceFactory(upstream)
-//                .setCache(cache)
-//                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-//        }
         return upstream
     }
 
@@ -737,6 +801,16 @@ class PlayerManagerImpl @Inject constructor(
         providerSessionState.runIfCurrent(generation) {
             timber.d("onVideoSizeChanged, [${videoSize.toRect()}]")
             size.value = videoSize.toRect()
+            if (videoSize.width > 0 && videoSize.height > 0) {
+                val activePlayer = playerForGeneration(generation)
+                telemetrySnapshot.value = telemetrySnapshot.value.copy(
+                    resolution = "${videoSize.width}x${videoSize.height}",
+                    bufferedPositionMs = activePlayer?.bufferedPosition ?: telemetrySnapshot.value.bufferedPositionMs,
+                    currentPositionMs = activePlayer?.currentPosition ?: telemetrySnapshot.value.currentPositionMs,
+                    totalBufferedDurationMs = activePlayer?.totalBufferedDuration ?: telemetrySnapshot.value.totalBufferedDurationMs,
+                    updatedAtEpochMs = System.currentTimeMillis()
+                )
+            }
         }
     }
 
@@ -746,6 +820,14 @@ class PlayerManagerImpl @Inject constructor(
     ) {
         providerSessionState.runIfCurrent(generation) {
             playbackState.value = state
+            val activePlayer = playerForGeneration(generation)
+            telemetrySnapshot.value = telemetrySnapshot.value.copy(
+                playbackState = state,
+                bufferedPositionMs = activePlayer?.bufferedPosition ?: telemetrySnapshot.value.bufferedPositionMs,
+                currentPositionMs = activePlayer?.currentPosition ?: telemetrySnapshot.value.currentPositionMs,
+                totalBufferedDurationMs = activePlayer?.totalBufferedDuration ?: telemetrySnapshot.value.totalBufferedDurationMs,
+                updatedAtEpochMs = System.currentTimeMillis()
+            )
             if (state == Player.STATE_ENDED) {
                 closeProviderSessionAsync(
                     session = providerSessionState.detach(generation),
@@ -764,21 +846,39 @@ class PlayerManagerImpl @Inject constructor(
         exception: PlaybackException?,
     ) {
         providerSessionState.runIfCurrent(generation) {
-            when (val errorCode = exception?.errorCode) {
-                PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> {
-                    timber.w("onPlayerErrorChanged, ERROR_CODE_BEHIND_LIVE_WINDOW, trying to replay")
-                    playerForGeneration(generation)?.let {
-                        it.seekToDefaultPosition()
-                        it.prepare()
+            updateErrorTelemetrySnapshot(playerForGeneration(generation), exception)
+            if (exception == null) {
+                playbackException.value = null
+                return@runIfCurrent
+            }
+            when {
+                exception.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> {
+                    behindLiveWindowAttempts++
+                    val activePlayer = playerForGeneration(generation)
+                    if (behindLiveWindowAttempts <= MAX_IMMEDIATE_LIVE_WINDOW_RESETS && activePlayer != null) {
+                        timber.w(
+                            "onPlayerErrorChanged, ERROR_CODE_BEHIND_LIVE_WINDOW (#$behindLiveWindowAttempts), seeking to live edge"
+                        )
+                        activePlayer.seekToDefaultPosition()
+                        activePlayer.prepare()
+                    } else if (behindLiveWindowAttempts <= MAX_BEHIND_LIVE_WINDOW_RETRIES) {
+                        val backoffAttempt = behindLiveWindowAttempts - MAX_IMMEDIATE_LIVE_WINDOW_RESETS - 1
+                        scheduleReconnect(
+                            generation = generation,
+                            exception = exception,
+                            delayMs = PlaybackResilience.exponentialBackoffDelayMs(backoffAttempt),
+                        )
+                    } else {
+                        failPlayback(generation, exception)
                     }
                 }
 
-                PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-                PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
-                PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
-                PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> {
+                exception.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
+                    exception.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
+                    exception.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                    exception.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> {
                     timber.w(
-                        "onPlayerErrorChanged, ${PlaybackException.getErrorCodeName(errorCode)}"
+                        "onPlayerErrorChanged, ${PlaybackException.getErrorCodeName(exception.errorCode)}"
                     )
                     when (val chain = chain) {
                         is MimetypeChain.Remembered -> {
@@ -799,13 +899,7 @@ class PlayerManagerImpl @Inject constructor(
                         val next = chain.next()
                         chain = next
                         when (next) {
-                            is MimetypeChain.Unsupported -> {
-                                playbackException.value = exception
-                                closeProviderSessionForGenerationAsync(
-                                    generation = generation,
-                                    reason = ProviderPlaybackCloseReason.PLAYBACK_FAILED,
-                                )
-                            }
+                            is MimetypeChain.Unsupported -> failPlayback(generation, exception)
 
                             else -> mainCoroutineScope.launch {
                                 tryPlay(
@@ -814,29 +908,76 @@ class PlayerManagerImpl @Inject constructor(
                                 )
                             }
                         }
+                    } else {
+                        failPlayback(generation, exception)
                     }
                 }
 
-                PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> {
-                    playbackException.value = exception
-                    closeProviderSessionForGenerationAsync(
+                PlaybackResilience.isDecoderFailure(exception) && !preferSoftwareDecoder -> {
+                    timber.w(
+                        exception,
+                        "Hardware decoder failed (${PlaybackException.getErrorCodeName(exception.errorCode)}), falling back to software/extension decoder"
+                    )
+                    preferSoftwareDecoder = true
+                    synchronized(playerLifecycleLock) {
+                        releaseActivePlayerInstanceLocked()
+                    }
+                    mainCoroutineScope.launch {
+                        if (!providerSessionState.isCurrent(generation)) return@launch
+                        tryPlay(
+                            generation = generation,
+                            applyContinueWatching = false,
+                        )
+                    }
+                }
+
+                PlaybackResilience.isTransientPlaybackError(exception) &&
+                    transientRetryAttempt < MAX_TRANSIENT_RECONNECT_ATTEMPTS -> {
+                    val delayMs = PlaybackResilience.exponentialBackoffDelayMs(transientRetryAttempt++)
+                    scheduleReconnect(
                         generation = generation,
-                        reason = ProviderPlaybackCloseReason.PLAYBACK_FAILED,
+                        exception = exception,
+                        delayMs = delayMs,
                     )
                 }
 
                 else -> {
-                    if (exception != null) {
-                        timber.e(exception, PlaybackException.getErrorCodeName(exception.errorCode))
-                        closeProviderSessionForGenerationAsync(
-                            generation = generation,
-                            reason = ProviderPlaybackCloseReason.PLAYBACK_FAILED,
-                        )
-                    }
-                    playbackException.value = exception
+                    failPlayback(generation, exception)
                 }
             }
         }
+    }
+
+    private fun scheduleReconnect(
+        generation: Long,
+        exception: PlaybackException,
+        delayMs: Long,
+    ) {
+        reconnectRetryJob?.cancel()
+        reconnectRetryJob = mainCoroutineScope.launch {
+            timber.w(
+                exception,
+                "Transient playback error (${PlaybackException.getErrorCodeName(exception.errorCode)}); reconnecting in ${delayMs}ms (attempt=$transientRetryAttempt)"
+            )
+            delay(delayMs)
+            if (!providerSessionState.isCurrent(generation)) return@launch
+            tryPlay(
+                generation = generation,
+                applyContinueWatching = false,
+            )
+        }
+    }
+
+    private fun failPlayback(
+        generation: Long,
+        exception: PlaybackException,
+    ) {
+        timber.e(exception, PlaybackException.getErrorCodeName(exception.errorCode))
+        closeProviderSessionForGenerationAsync(
+            generation = generation,
+            reason = ProviderPlaybackCloseReason.PLAYBACK_FAILED,
+        )
+        playbackException.value = exception
     }
 
     private fun handleTracksChanged(
@@ -845,6 +986,7 @@ class PlayerManagerImpl @Inject constructor(
     ) {
         providerSessionState.runIfCurrent(generation) {
             tracksGroups.value = tracks.groups
+            updateTrackTelemetrySnapshot(playerForGeneration(generation), tracks)
         }
     }
 
@@ -854,7 +996,91 @@ class PlayerManagerImpl @Inject constructor(
     ) {
         providerSessionState.runIfCurrent(generation) {
             this.isPlaying.value = isPlaying
+            val activePlayer = playerForGeneration(generation)
+            telemetrySnapshot.value = telemetrySnapshot.value.copy(
+                isPlaying = isPlaying,
+                bufferedPositionMs = activePlayer?.bufferedPosition ?: telemetrySnapshot.value.bufferedPositionMs,
+                currentPositionMs = activePlayer?.currentPosition ?: telemetrySnapshot.value.currentPositionMs,
+                totalBufferedDurationMs = activePlayer?.totalBufferedDuration ?: telemetrySnapshot.value.totalBufferedDurationMs,
+                updatedAtEpochMs = System.currentTimeMillis()
+            )
         }
+    }
+
+    private fun updateBufferMetricsSnapshot(activePlayer: ExoPlayer) {
+        telemetrySnapshot.value = telemetrySnapshot.value.copy(
+            bufferedPositionMs = activePlayer.bufferedPosition,
+            currentPositionMs = activePlayer.currentPosition,
+            totalBufferedDurationMs = activePlayer.totalBufferedDuration,
+            updatedAtEpochMs = System.currentTimeMillis()
+        )
+    }
+
+    private fun updateTrackTelemetrySnapshot(
+        activePlayer: ExoPlayer?,
+        tracks: Tracks
+    ) {
+        val videoFormat = findSelectedTrackFormat(tracks, C.TRACK_TYPE_VIDEO)
+        val audioFormat = findSelectedTrackFormat(tracks, C.TRACK_TYPE_AUDIO)
+        val streamFormat = videoFormat?.containerMimeType
+            ?: audioFormat?.containerMimeType
+            ?: videoFormat?.sampleMimeType
+            ?: telemetrySnapshot.value.streamFormat
+        val videoCodec = videoFormat?.codecs
+            ?: videoFormat?.sampleMimeType
+            ?: telemetrySnapshot.value.videoCodec
+        val audioCodec = audioFormat?.codecs
+            ?: audioFormat?.sampleMimeType
+            ?: telemetrySnapshot.value.audioCodec
+        val resolution = if (videoFormat != null && videoFormat.width > 0 && videoFormat.height > 0) {
+            "${videoFormat.width}x${videoFormat.height}"
+        } else {
+            telemetrySnapshot.value.resolution
+        }
+        telemetrySnapshot.value = telemetrySnapshot.value.copy(
+            streamFormat = streamFormat,
+            videoCodec = videoCodec,
+            audioCodec = audioCodec,
+            resolution = resolution,
+            bufferedPositionMs = activePlayer?.bufferedPosition ?: telemetrySnapshot.value.bufferedPositionMs,
+            currentPositionMs = activePlayer?.currentPosition ?: telemetrySnapshot.value.currentPositionMs,
+            totalBufferedDurationMs = activePlayer?.totalBufferedDuration ?: telemetrySnapshot.value.totalBufferedDurationMs,
+            updatedAtEpochMs = System.currentTimeMillis()
+        )
+    }
+
+    private fun findSelectedTrackFormat(
+        tracks: Tracks,
+        trackType: @C.TrackType Int
+    ) = tracks.groups
+        .asSequence()
+        .filter { it.type == trackType }
+        .mapNotNull { group ->
+            (0 until group.length)
+                .firstOrNull { index -> group.isTrackSupported(index) && group.isTrackSelected(index) }
+                ?.let(group::getTrackFormat)
+        }
+        .firstOrNull()
+
+    private fun updateErrorTelemetrySnapshot(
+        activePlayer: ExoPlayer?,
+        exception: PlaybackException?
+    ) {
+        val httpResponseCode = exception?.let { error ->
+            generateSequence<Throwable>(error) { it.cause }
+                .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
+                .firstOrNull()
+                ?.responseCode
+        }
+        telemetrySnapshot.value = telemetrySnapshot.value.copy(
+            httpResponseCode = httpResponseCode ?: telemetrySnapshot.value.httpResponseCode,
+            lastErrorCode = exception?.errorCode,
+            lastErrorName = exception?.let { PlaybackException.getErrorCodeName(it.errorCode) },
+            bufferedPositionMs = activePlayer?.bufferedPosition ?: telemetrySnapshot.value.bufferedPositionMs,
+            currentPositionMs = activePlayer?.currentPosition ?: telemetrySnapshot.value.currentPositionMs,
+            totalBufferedDurationMs = activePlayer?.totalBufferedDuration ?: telemetrySnapshot.value.totalBufferedDurationMs,
+            updatedAtEpochMs = System.currentTimeMillis()
+        )
     }
 
     private fun playerForGeneration(generation: Long): ExoPlayer? =
@@ -989,6 +1215,9 @@ class PlayerManagerImpl @Inject constructor(
 
     private suspend fun onPlaybackReady(generation: Long) {
         if (!providerSessionState.isCurrent(generation)) return
+        transientRetryAttempt = 0
+        behindLiveWindowAttempts = 0
+        playbackException.value = null
         timber.d("onPlaybackReady, trying the playChain $chain")
         when (val chain = chain) {
             is MimetypeChain.Remembered -> {
@@ -1090,6 +1319,13 @@ class PlayerManagerImpl @Inject constructor(
                     channelPreference?.copy(cwPosition = newCwPosition)
                         ?: ChannelPreference(cwPosition = newCwPosition)
                 )
+                val activeChannel = channel.value
+                channelRepository.updateWatchProgress(
+                    streamUrl = activeChannel?.url ?: channelUrl,
+                    positionMs = newCwPosition,
+                    durationMs = playbackDuration.value,
+                    channelId = activeChannel?.id,
+                )
             }
     }
 
@@ -1124,6 +1360,14 @@ class PlayerManagerImpl @Inject constructor(
                 addChannelPreference(
                     channelUrl,
                     channelPreference?.copy(cwPosition = -1L) ?: ChannelPreference(cwPosition = -1L)
+                )
+                val activeChannel = channel.value
+                val duration = player.duration.takeIf { it > 0L } ?: -1L
+                channelRepository.updateWatchProgress(
+                    streamUrl = activeChannel?.url ?: channelUrl,
+                    positionMs = -1L,
+                    durationMs = duration,
+                    channelId = activeChannel?.id,
                 )
             }
         }
@@ -1168,12 +1412,59 @@ class PlayerManagerImpl @Inject constructor(
         return channelPreferenceProvider[channelUrl]
     }
 
+    override suspend fun resolveExternalPlaybackTarget(command: MediaCommand): ExternalPlaybackTarget? {
+        val channel = when (command) {
+            is MediaCommand.Common -> channelRepository.get(command.channelId)
+            is MediaCommand.XtreamEpisode -> channelRepository
+                .get(command.channelId)
+                ?.copyXtreamEpisode(command.episode)
+        } ?: return null
+        val providerSource = runCatching {
+            subscriptionProviderRepository.resolvePlayback(channel.id)
+        }.getOrNull()
+        val rawUrl = providerSource?.url
+            ?: channel.url.takeUnless { url -> url == Channel.URL_DYNAMIC }
+            ?: return null
+        val kodi = PlaybackResilience.parseKodiUrl(rawUrl)
+        val playlist = playlistRepository.get(channel.playlistUrl)
+        val resolvedHeaders = PlaybackResilience.resolvePlaybackHeaders(
+            kodi = kodi,
+            playlistUserAgent = playlist?.userAgent,
+            providerHeaders = providerSource?.headers.orEmpty(),
+            fallbackUserAgent = defaultUserAgent(),
+        )
+        val channelPreference = getChannelPreference(kodi.cleanUrl)
+            ?: getChannelPreference(rawUrl)
+        channelRepository.reportPlayed(channel.id)
+        val headers = resolvedHeaders.headers
+        val referer = kodi.referer ?: headers.entries
+            .firstOrNull { (key, _) -> key.equals("Referer", ignoreCase = true) }
+            ?.value
+        return ExternalPlaybackTarget(
+            title = channel.title,
+            url = kodi.cleanUrl,
+            mimeType = PlaybackResilience.inferExternalMimeType(
+                url = kodi.cleanUrl,
+                rememberedMimeType = channelPreference?.mineType,
+            ),
+            userAgent = resolvedHeaders.userAgent,
+            referer = referer,
+            headers = headers,
+        )
+    }
+
     private suspend fun addChannelPreference(
         channelUrl: String,
         channelPreference: ChannelPreference
     ) {
         if (channelUrl.isEmpty()) return
         channelPreferenceProvider[channelUrl] = channelPreference
+    }
+
+    private companion object {
+        private const val MAX_IMMEDIATE_LIVE_WINDOW_RESETS = 2
+        private const val MAX_BEHIND_LIVE_WINDOW_RETRIES = 5
+        private const val MAX_TRANSIENT_RECONNECT_ATTEMPTS = 4
     }
 }
 

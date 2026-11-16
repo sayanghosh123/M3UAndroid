@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.Details
 import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.Loop
 import androidx.compose.material.icons.rounded.PictureInPicture
+import androidx.compose.material.icons.rounded.PlayCircleOutline
 import androidx.compose.material.icons.rounded.Recommend
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.ReplayCircleFilled
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.m3u.core.foundation.architecture.preferences.ConnectTimeout
+import com.m3u.core.foundation.architecture.preferences.PlayerMode
 import com.m3u.core.foundation.architecture.preferences.PlaylistStrategy
 import com.m3u.core.foundation.architecture.preferences.PreferencesKeys
 import com.m3u.core.foundation.architecture.preferences.ReconnectMode
@@ -150,6 +152,24 @@ internal fun OptionalFragment(
                 icon = Icons.Rounded.Cast,
                 checked = screencast,
                 onChanged = { screencast = !screencast }
+            )
+        }
+        item {
+            var playerMode by mutablePreferenceOf(PreferencesKeys.DEFAULT_PLAYER_MODE)
+            TextPreference(
+                title = stringResource(string.feat_setting_player_mode).title(),
+                content = stringResource(string.feat_setting_player_mode_description),
+                icon = Icons.Rounded.PlayCircleOutline,
+                trailing = when (playerMode) {
+                    PlayerMode.EXTERNAL -> stringResource(string.feat_setting_player_mode_external)
+                    else -> stringResource(string.feat_setting_player_mode_internal)
+                },
+                onClick = {
+                    playerMode = when (playerMode) {
+                        PlayerMode.EXTERNAL -> PlayerMode.INTERNAL
+                        else -> PlayerMode.EXTERNAL
+                    }
+                }
             )
         }
         item {
