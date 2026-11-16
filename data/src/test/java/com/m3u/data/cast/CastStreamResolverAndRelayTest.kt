@@ -227,4 +227,91 @@ class CastStreamResolverAndRelayTest {
                 }
             }
         }
+
+    @Test
+    fun `relay server and resolver inherit TiviMate user agent when playlist omits headers`(): Unit =
+        runBlocking {
+            val client = OkHttpClient()
+            val relayServer = CastHttpRelayServer(
+                baseOkHttpClient = client,
+                hostAddressProvider = { "127.0.0.1" },
+            )
+            val resolver = CastStreamResolver(
+                baseOkHttpClient = client,
+                relayServer = relayServer,
+                subscriptionProviderRepository = null,
+            )
+
+            MockWebServer().use { upstream ->
+                upstream.start()
+                try {
+                    val redirectedTarget = upstream.url("/edge/stream.m3u8").toString()
+                    // Probe 302 -> 200 triggers relay even without custom playlist headers.
+                    upstream.enqueue(
+                        MockResponse.Builder()
+                            .code(302)
+                            .addHeader("Location", redirectedTarget)
+                            .build()
+                    )
+                    upstream.enqueue(
+                        MockResponse.Builder()
+                            .code(200)
+                            .addHeader("Content-Type", "application/x-mpegurl")
+                            .build()
+                    )
+                    // Relay fetch 302 -> 200
+                    upstream.enqueue(
+                        MockResponse.Builder()
+                            .code(302)
+                            .addHeader("Location", redirectedTarget)
+                            .build()
+                    )
+                    upstream.enqueue(
+                        MockResponse.Builder()
+                            .code(200)
+                            .addHeader("Content-Type", "application/x-mpegurl")
+                            .body("#EXTM3U\n#EXTINF:4.0,\nseg0.ts\n")
+                            .build()
+                    )
+                    // Direct relayServer session with empty headers map
+                    upstream.enqueue(
+                        MockResponse.Builder()
+                            .code(200)
+                            .addHeader("Content-Type", "video/mp2t")
+                            .body("DIRECT-RELAY-BYTES")
+                            .build()
+                    )
+
+                    val channel = Channel(
+                        id = 7,
+                        url = upstream.url("/live/u/p/7.ts").toString(),
+                        category = "Sports",
+                        title = "Sport Channel",
+                        cover = null,
+                        playlistUrl = "http://provider.test/list.m3u",
+                    )
+                    val plan = resolver.resolveForCast(channel, playlist = null).getOrThrow()
+                    assertTrue(plan.proxiedViaLocalRelay)
+
+                    client.newCall(Request.Builder().url(plan.castUrl).build()).execute().use { resp ->
+                        assertEquals(200, resp.code)
+                    }
+
+                    val directRelayUrl = relayServer.registerStream(
+                        upstreamUrl = upstream.url("/raw/video.ts").toString(),
+                        headers = emptyMap(),
+                        isHls = false,
+                    )!!
+                    client.newCall(Request.Builder().url(directRelayUrl).build()).execute().use { resp ->
+                        assertEquals(200, resp.code)
+                        assertEquals("DIRECT-RELAY-BYTES", resp.body.string())
+                    }
+
+                    val requests = List(5) { upstream.takeRequest() }
+                    assertTrue(requests.all { it.headers["User-Agent"] == "TiviMate/4.7.0" })
+                } finally {
+                    relayServer.stop()
+                }
+            }
+        }
 }

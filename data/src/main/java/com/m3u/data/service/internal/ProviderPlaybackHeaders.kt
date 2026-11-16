@@ -10,11 +10,22 @@ internal fun OkHttpClient.withProviderPlaybackHeaders(
     entryUrl: String,
     headers: Map<String, String>,
     allowCrossOriginRequests: Boolean,
+    defaultUserAgent: String = PlaybackResilience.DEFAULT_USER_AGENT,
 ): OkHttpClient {
-    if (headers.isEmpty() && allowCrossOriginRequests) return this
     val approvedUrl = entryUrl.toHttpUrl()
     val providerHeaders = headers.toMap()
     val builder = newBuilder()
+        .addInterceptor { chain ->
+            val incoming = chain.request()
+            val request = if (incoming.header("User-Agent").isNullOrBlank()) {
+                incoming.newBuilder()
+                    .header("User-Agent", defaultUserAgent)
+                    .build()
+            } else {
+                incoming
+            }
+            chain.proceed(request)
+        }
     if (!allowCrossOriginRequests) {
         builder
             .followRedirects(false)
@@ -25,6 +36,7 @@ internal fun OkHttpClient.withProviderPlaybackHeaders(
                     approvedUrl = approvedUrl,
                     headers = providerHeaders,
                     allowCrossOriginRequests = false,
+                    defaultUserAgent = defaultUserAgent,
                 )
                 repeat(MAX_STRICT_REDIRECTS + 1) { redirectCount ->
                     val response = chain.proceed(request)
@@ -43,6 +55,7 @@ internal fun OkHttpClient.withProviderPlaybackHeaders(
                             approvedUrl = approvedUrl,
                             headers = providerHeaders,
                             allowCrossOriginRequests = false,
+                            defaultUserAgent = defaultUserAgent,
                         )
                 }
                 error("Strict playback redirect loop terminated unexpectedly")
@@ -56,6 +69,7 @@ internal fun OkHttpClient.withProviderPlaybackHeaders(
                     approvedUrl = approvedUrl,
                     headers = providerHeaders,
                     allowCrossOriginRequests = allowCrossOriginRequests,
+                    defaultUserAgent = defaultUserAgent,
                 )
             )
         }
@@ -66,6 +80,7 @@ internal fun Request.withProviderPlaybackHeaders(
     approvedUrl: HttpUrl,
     headers: Map<String, String>,
     allowCrossOriginRequests: Boolean = true,
+    defaultUserAgent: String = PlaybackResilience.DEFAULT_USER_AGENT,
 ): Request {
     if (!url.hasSameOriginAs(approvedUrl)) {
         if (!allowCrossOriginRequests) {
@@ -77,11 +92,19 @@ internal fun Request.withProviderPlaybackHeaders(
                 sanitized.removeHeader(name)
             }
         }
+        if (sanitized.build().header("User-Agent").isNullOrBlank()) {
+            sanitized.header("User-Agent", defaultUserAgent)
+        }
         return sanitized.build()
     }
     return newBuilder()
         .apply {
             headers.forEach { (name, value) -> header(name, value) }
+            val hasExplicitUa = headers.keys.any { it.equals("User-Agent", ignoreCase = true) } ||
+                !header("User-Agent").isNullOrBlank()
+            if (!hasExplicitUa) {
+                header("User-Agent", defaultUserAgent)
+            }
         }
         .build()
 }

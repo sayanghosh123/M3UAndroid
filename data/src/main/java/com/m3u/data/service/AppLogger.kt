@@ -147,6 +147,32 @@ class AppLogger @Inject constructor(
     }
 
     /**
+     * Records a structured diagnostic event (such as playlist sync metrics or empty-sync warnings)
+     * asynchronously with automatic credential redaction regardless of UI display log threshold.
+     */
+    fun recordDiagnostic(
+        priority: Int,
+        tag: String,
+        message: String,
+        throwable: Throwable? = null,
+    ) {
+        appendRingEntry(
+            priority = priority,
+            tag = tag,
+            message = message,
+            throwable = throwable,
+        )
+        commands.trySend(
+            LogCommand.Write(
+                priority = priority,
+                tag = tag,
+                message = message,
+                throwable = throwable,
+            )
+        )
+    }
+
+    /**
      * Records an uncaught or critical failure without acquiring file I/O locks on the caller thread.
      */
     fun recordException(

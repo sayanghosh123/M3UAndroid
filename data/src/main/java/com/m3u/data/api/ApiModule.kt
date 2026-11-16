@@ -7,6 +7,7 @@ import com.chuckerteam.chucker.api.ChuckerInterceptor
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.m3u.data.Certs
 import com.m3u.data.SSLs
+import com.m3u.data.service.internal.PlaybackResilience
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -60,7 +61,14 @@ internal object ApiModule {
         return OkHttpClient.Builder()
             .authenticator(Authenticator.JAVA_NET_AUTHENTICATOR)
             .addInterceptor { chain ->
-                val request = chain.request()
+                val incoming = chain.request()
+                val request = if (incoming.header("User-Agent").isNullOrBlank()) {
+                    incoming.newBuilder()
+                        .header("User-Agent", PlaybackResilience.DEFAULT_USER_AGENT)
+                        .build()
+                } else {
+                    incoming
+                }
                 try {
                     chain.proceed(request)
                 } catch (e: Exception) {

@@ -20,6 +20,7 @@ internal data class ResolvedPlaybackHeaders(
 )
 
 internal object PlaybackResilience {
+    const val DEFAULT_USER_AGENT = "TiviMate/4.7.0"
     private val TRANSIENT_HTTP_STATUS_CODES = setOf(408, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524)
 
     /**
@@ -70,7 +71,7 @@ internal object PlaybackResilience {
         kodi: KodiUrlMetadata,
         playlistUserAgent: String?,
         providerHeaders: Map<String, String>,
-        fallbackUserAgent: String,
+        fallbackUserAgent: String = DEFAULT_USER_AGENT,
     ): ResolvedPlaybackHeaders {
         val merged = linkedMapOf<String, String>()
         merged.putAll(providerHeaders)

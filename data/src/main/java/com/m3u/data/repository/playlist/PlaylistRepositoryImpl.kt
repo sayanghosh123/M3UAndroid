@@ -3,6 +3,7 @@ package com.m3u.data.repository.playlist
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.core.net.toUri
 import androidx.room.withTransaction
 import androidx.work.WorkManager
@@ -25,6 +26,7 @@ import com.m3u.data.database.model.DataSource
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.database.model.PlaylistWithChannels
 import com.m3u.data.database.model.ProviderAccount
+import com.m3u.data.database.model.StreamKind
 import com.m3u.data.database.model.refreshable
 import com.m3u.data.database.model.toMap
 import com.m3u.data.parser.m3u.M3UParser
@@ -53,6 +55,8 @@ import com.m3u.data.repository.extension.ExtensionContributionRunCoordinator
 import com.m3u.data.repository.extension.ExtensionContributionScheduler
 import com.m3u.data.repository.provider.ProviderLifecycleCoordinator
 import com.m3u.data.repository.provider.SubscriptionProviderRepository
+import com.m3u.data.service.AppLogger
+import com.m3u.data.service.internal.PlaybackResilience
 import com.m3u.data.worker.SubscriptionWorker
 import com.m3u.data.worker.ProviderRefreshWorker
 import com.m3u.data.worker.epgSubscriptionWorkName
@@ -166,7 +170,43 @@ internal class PlaylistRepositoryImpl @Inject constructor(
     private val subscriptionProviderRepository: SubscriptionProviderRepository,
     private val extensionContributionScheduler: ExtensionContributionScheduler,
     private val extensionContributionRunCoordinator: ExtensionContributionRunCoordinator,
+    private val appLogger: AppLogger?,
 ) : PlaylistRepository {
+    constructor(
+        playlistDao: PlaylistDao,
+        channelDao: ChannelDao,
+        providerDao: ProviderDao,
+        database: M3UDatabase,
+        providerLifecycleCoordinator: ProviderLifecycleCoordinator,
+        programmeDao: ProgrammeDao,
+        okHttpClient: OkHttpClient,
+        m3uParser: M3UParser,
+        xtreamParser: XtreamParser,
+        workManager: WorkManager,
+        context: Context,
+        settings: Settings,
+        subscriptionProviderRepository: SubscriptionProviderRepository,
+        extensionContributionScheduler: ExtensionContributionScheduler,
+        extensionContributionRunCoordinator: ExtensionContributionRunCoordinator,
+    ) : this(
+        playlistDao = playlistDao,
+        channelDao = channelDao,
+        providerDao = providerDao,
+        database = database,
+        providerLifecycleCoordinator = providerLifecycleCoordinator,
+        programmeDao = programmeDao,
+        okHttpClient = okHttpClient,
+        m3uParser = m3uParser,
+        xtreamParser = xtreamParser,
+        workManager = workManager,
+        context = context,
+        settings = settings,
+        subscriptionProviderRepository = subscriptionProviderRepository,
+        extensionContributionScheduler = extensionContributionScheduler,
+        extensionContributionRunCoordinator = extensionContributionRunCoordinator,
+        appLogger = null,
+    )
+
     private val timber = Timber.tag("PlaylistRepositoryImpl")
 
     override suspend fun m3uOrThrow(
@@ -209,23 +249,61 @@ internal class PlaylistRepositoryImpl @Inject constructor(
     ) {
         callback(0)
         timber.d("Importing M3U subscription")
+        val startedAtNs = System.nanoTime()
+        val httpStatuses = mutableListOf<Int>()
+        var liveCount = 0
+        var movieCount = 0
+        var seriesCount = 0
         val existingPlaylistUrls = arrayOf(sourceUrl, internalUrl).distinct().toTypedArray()
         val stagedChannels = flow {
-            openM3uInputOrThrow(inputUrl).use { input ->
+            openM3uInputOrThrow(inputUrl, httpStatuses).use { input ->
                 m3uParser.parse(input.buffered()).collect { parsed ->
+                    val channel = parsed.toChannel(internalUrl)
+                    when (channel.kind) {
+                        StreamKind.MOVIE -> movieCount++
+                        StreamKind.SERIES -> seriesCount++
+                        else -> liveCount++
+                    }
                     emit(
                         StagedChannel(
-                            channel = parsed.toChannel(internalUrl),
+                            channel = channel,
                             preservationRelationId = parsed.id.takeIf(String::isNotBlank),
                         )
                     )
                 }
             }
         }
-        val staging = stageChannels(
-            progressBatchSize = BUFFER_M3U_CAPACITY,
-            callback = callback,
-            channels = stagedChannels,
+        val staging = try {
+            stageChannels(
+                progressBatchSize = BUFFER_M3U_CAPACITY,
+                callback = callback,
+                channels = stagedChannels,
+            )
+        } catch (error: Throwable) {
+            recordSyncTelemetry(
+                summary = PlaylistSyncSummary(
+                    source = "m3u",
+                    httpStatuses = httpStatuses,
+                    liveCount = liveCount,
+                    movieCount = movieCount,
+                    seriesCount = seriesCount,
+                    elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L,
+                    targetUrl = sourceUrl,
+                ),
+                throwable = error,
+            )
+            throw error
+        }
+        recordSyncTelemetry(
+            summary = PlaylistSyncSummary(
+                source = "m3u",
+                httpStatuses = httpStatuses,
+                liveCount = liveCount,
+                movieCount = movieCount,
+                seriesCount = seriesCount,
+                elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L,
+                targetUrl = sourceUrl,
+            )
         )
         try {
             val playlistStrategy = settings[PreferencesKeys.PLAYLIST_STRATEGY]
@@ -309,7 +387,12 @@ internal class PlaylistRepositoryImpl @Inject constructor(
         type: String?,
         callback: (count: Int) -> Unit
     ): Unit = PlaylistDataMaintenanceCoordinator.withExclusive {
+        val startedAtNs = System.nanoTime()
         val input = XtreamInput(basicUrl, username, password, type)
+        xtreamParser.clearHttpStatusHistory()
+        var liveCount = 0
+        var movieCount = 0
+        var seriesCount = 0
         val (
             liveCategories,
             vodCategories,
@@ -317,8 +400,24 @@ internal class PlaylistRepositoryImpl @Inject constructor(
             allowedOutputFormats,
             serverProtocol,
             port
-        ) = withContext(Dispatchers.IO) {
-            xtreamParser.getXtreamOutput(input)
+        ) = try {
+            withContext(Dispatchers.IO) {
+                xtreamParser.getXtreamOutput(input)
+            }
+        } catch (error: Throwable) {
+            recordSyncTelemetry(
+                summary = PlaylistSyncSummary(
+                    source = "xtream",
+                    httpStatuses = xtreamParser.drainHttpStatusHistory(),
+                    liveCount = 0,
+                    movieCount = 0,
+                    seriesCount = 0,
+                    elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L,
+                    targetUrl = basicUrl,
+                ),
+                throwable = error,
+            )
+            throw error
         }
 
         // we like ts but not m3u8.
@@ -367,46 +466,82 @@ internal class PlaylistRepositoryImpl @Inject constructor(
             )
             val stagedChannels = xtreamParser.parse(input).map { current ->
                 when (current) {
-                    is XtreamLive -> StagedChannel(
-                        channel = current.toChannel(
-                            basicUrl = basicUrl,
-                            username = username,
-                            password = password,
-                            playlistUrl = livePlaylistUrl,
-                            category = liveCategoryNames[current.categoryId].orEmpty(),
-                            containerExtension = liveContainerExtension,
-                        ),
-                        preservationRelationId = current.streamId?.toString(),
-                    )
+                    is XtreamLive -> {
+                        liveCount++
+                        StagedChannel(
+                            channel = current.toChannel(
+                                basicUrl = basicUrl,
+                                username = username,
+                                password = password,
+                                playlistUrl = livePlaylistUrl,
+                                category = liveCategoryNames[current.categoryId].orEmpty(),
+                                containerExtension = liveContainerExtension,
+                            ),
+                            preservationRelationId = current.streamId?.toString(),
+                        )
+                    }
 
-                    is XtreamVod -> StagedChannel(
-                        channel = current.toChannel(
-                            basicUrl = basicUrl,
-                            username = username,
-                            password = password,
-                            playlistUrl = vodPlaylistUrl,
-                            category = vodCategoryNames[current.categoryId].orEmpty(),
-                        ),
-                        preservationRelationId = current.streamId?.toString(),
-                    )
+                    is XtreamVod -> {
+                        movieCount++
+                        StagedChannel(
+                            channel = current.toChannel(
+                                basicUrl = basicUrl,
+                                username = username,
+                                password = password,
+                                playlistUrl = vodPlaylistUrl,
+                                category = vodCategoryNames[current.categoryId].orEmpty(),
+                            ),
+                            preservationRelationId = current.streamId?.toString(),
+                        )
+                    }
 
                     // Series are persisted as channels and resolved when selected.
-                    is XtreamSerial -> StagedChannel(
-                        channel = current.asChannel(
-                            basicUrl = basicUrl,
-                            username = username,
-                            password = password,
-                            playlistUrl = seriesPlaylistUrl,
-                            category = serialCategoryNames[current.categoryId].orEmpty(),
-                        ),
-                        preservationRelationId = current.seriesId?.toString(),
-                    )
+                    is XtreamSerial -> {
+                        seriesCount++
+                        StagedChannel(
+                            channel = current.asChannel(
+                                basicUrl = basicUrl,
+                                username = username,
+                                password = password,
+                                playlistUrl = seriesPlaylistUrl,
+                                category = serialCategoryNames[current.categoryId].orEmpty(),
+                            ),
+                            preservationRelationId = current.seriesId?.toString(),
+                        )
+                    }
                 }
             }
-            val staging = stageChannels(
-                progressBatchSize = BUFFER_XTREAM_CAPACITY,
-                callback = callback,
-                channels = stagedChannels,
+            val staging = try {
+                stageChannels(
+                    progressBatchSize = BUFFER_XTREAM_CAPACITY,
+                    callback = callback,
+                    channels = stagedChannels,
+                )
+            } catch (error: Throwable) {
+                recordSyncTelemetry(
+                    summary = PlaylistSyncSummary(
+                        source = "xtream",
+                        httpStatuses = xtreamParser.drainHttpStatusHistory(),
+                        liveCount = liveCount,
+                        movieCount = movieCount,
+                        seriesCount = seriesCount,
+                        elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L,
+                        targetUrl = basicUrl,
+                    ),
+                    throwable = error,
+                )
+                throw error
+            }
+            recordSyncTelemetry(
+                summary = PlaylistSyncSummary(
+                    source = "xtream",
+                    httpStatuses = xtreamParser.drainHttpStatusHistory(),
+                    liveCount = liveCount,
+                    movieCount = movieCount,
+                    seriesCount = seriesCount,
+                    elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L,
+                    targetUrl = basicUrl,
+                )
             )
             try {
                 val playlistStrategy = settings[PreferencesKeys.PLAYLIST_STRATEGY]
@@ -1452,17 +1587,43 @@ internal class PlaylistRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun openM3uInputOrThrow(url: String): InputStream = when {
-        url.isSupportedNetworkUrl() -> openNetworkInput(url)
+    private fun recordSyncTelemetry(
+        summary: PlaylistSyncSummary,
+        throwable: Throwable? = null,
+    ) {
+        val priority = if (throwable != null || summary.isEmptySync) Log.WARN else summary.logPriority()
+        val message = summary.formatMessage()
+        appLogger?.recordDiagnostic(
+            priority = priority,
+            tag = "PlaylistSync",
+            message = message,
+            throwable = throwable,
+        )
+        when (priority) {
+            Log.WARN, Log.ERROR -> timber.w(throwable, "%s", message)
+            else -> timber.i("%s", message)
+        }
+    }
+
+    private fun openM3uInputOrThrow(
+        url: String,
+        httpStatuses: MutableList<Int>? = null,
+    ): InputStream = when {
+        url.isSupportedNetworkUrl() -> openNetworkInput(url, httpStatuses)
         url.isSupportedAndroidUrl() -> openAndroidInput(url)
         else -> throw IOException("Unsupported playlist location")
     }
 
-    private fun openNetworkInput(url: String): InputStream {
+    private fun openNetworkInput(
+        url: String,
+        httpStatuses: MutableList<Int>? = null,
+    ): InputStream {
         val request = Request.Builder()
             .url(url)
+            .header("User-Agent", PlaybackResilience.DEFAULT_USER_AGENT)
             .build()
         val response = okHttpClient.newCall(request).execute()
+        httpStatuses?.add(response.code)
         if (!response.isSuccessful) {
             response.close()
             throw IOException("Unable to download playlist (HTTP ${response.code})")

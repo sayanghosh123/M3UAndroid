@@ -151,8 +151,7 @@ class PlayerManagerImpl @Inject constructor(
     private var behindLiveWindowAttempts = 0
     private var reconnectRetryJob: Job? = null
 
-    private fun defaultUserAgent(): String =
-        "M3UAndroid/${publisher.versionName} (Android ${Build.VERSION.RELEASE})"
+    private fun defaultUserAgent(): String = PlaybackResilience.DEFAULT_USER_AGENT
 
     override val playlist: StateFlow<Playlist?> = mediaCommand.flatMapLatest { command ->
         when (command) {
@@ -787,7 +786,7 @@ class PlayerManagerImpl @Inject constructor(
                 .build()
         }
         val upstream = OkHttpDataSource.Factory(client)
-            .setUserAgent(userAgent)
+            .setUserAgent(userAgent?.takeIf { it.isNotBlank() } ?: defaultUserAgent())
         if (!providerPlayback) {
             upstream.setDefaultRequestProperties(requestHeaders)
         }

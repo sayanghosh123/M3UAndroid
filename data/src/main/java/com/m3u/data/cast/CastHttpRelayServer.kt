@@ -1,6 +1,7 @@
 package com.m3u.data.cast
 
 import com.m3u.data.api.OkhttpClient
+import com.m3u.data.service.internal.PlaybackResilience
 import com.m3u.data.tv.Utils
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -44,6 +45,7 @@ import javax.inject.Singleton
 class CastHttpRelayServer internal constructor(
     baseOkHttpClient: OkHttpClient,
     private val hostAddressProvider: () -> String?,
+    private val defaultUserAgent: String = PlaybackResilience.DEFAULT_USER_AGENT,
 ) {
     @Inject
     constructor(
@@ -51,6 +53,7 @@ class CastHttpRelayServer internal constructor(
     ) : this(
         baseOkHttpClient = okHttpClient,
         hostAddressProvider = { Utils.getLocalHostAddress() },
+        defaultUserAgent = PlaybackResilience.DEFAULT_USER_AGENT,
     )
 
     internal data class RelaySession(
@@ -203,6 +206,12 @@ class CastHttpRelayServer internal constructor(
             if (key.isNotBlank() && value.isNotBlank()) {
                 requestBuilder.header(key, value)
             }
+        }
+        val hasUserAgent = session.headers.any { (key, value) ->
+            key.equals("User-Agent", ignoreCase = true) && value.isNotBlank()
+        }
+        if (!hasUserAgent) {
+            requestBuilder.header("User-Agent", defaultUserAgent)
         }
         if (!clientRange.isNullOrBlank()) {
             requestBuilder.header("Range", clientRange)

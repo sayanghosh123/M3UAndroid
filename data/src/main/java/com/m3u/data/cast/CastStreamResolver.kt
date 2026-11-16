@@ -1,7 +1,5 @@
 package com.m3u.data.cast
 
-import android.os.Build
-import com.m3u.core.foundation.architecture.Publisher
 import com.m3u.data.api.OkhttpClient
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
@@ -31,19 +29,18 @@ class CastStreamResolver internal constructor(
     baseOkHttpClient: OkHttpClient,
     private val relayServer: CastHttpRelayServer,
     private val subscriptionProviderRepository: SubscriptionProviderRepository?,
-    private val fallbackUserAgent: String,
+    private val fallbackUserAgent: String = PlaybackResilience.DEFAULT_USER_AGENT,
 ) {
     @Inject
     constructor(
         @OkhttpClient(false) okHttpClient: OkHttpClient,
         relayServer: CastHttpRelayServer,
         subscriptionProviderRepository: SubscriptionProviderRepository,
-        publisher: Publisher,
     ) : this(
         baseOkHttpClient = okHttpClient,
         relayServer = relayServer,
         subscriptionProviderRepository = subscriptionProviderRepository,
-        fallbackUserAgent = "M3UAndroid/${publisher.versionName} (Android ${Build.VERSION.RELEASE})",
+        fallbackUserAgent = PlaybackResilience.DEFAULT_USER_AGENT,
     )
 
     private val timber = Timber.tag("CastStreamResolver")

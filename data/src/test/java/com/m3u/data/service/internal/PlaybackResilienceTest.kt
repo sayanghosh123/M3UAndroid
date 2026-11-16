@@ -60,6 +60,20 @@ class PlaybackResilienceTest {
     }
 
     @Test
+    fun `resolvePlaybackHeaders falls back to TiviMate user agent by default`() {
+        val kodi = PlaybackResilience.parseKodiUrl("https://stream.example.net/live/100.ts")
+        val resolved = PlaybackResilience.resolvePlaybackHeaders(
+            kodi = kodi,
+            playlistUserAgent = null,
+            providerHeaders = emptyMap(),
+        )
+
+        assertEquals("TiviMate/4.7.0", PlaybackResilience.DEFAULT_USER_AGENT)
+        assertEquals("TiviMate/4.7.0", resolved.userAgent)
+        assertEquals("TiviMate/4.7.0", resolved.headers["User-Agent"])
+    }
+
+    @Test
     fun `inferExternalMimeType maps hls ts dash remembered types and falls back cleanly`() {
         assertEquals(
             "application/x-mpegURL",

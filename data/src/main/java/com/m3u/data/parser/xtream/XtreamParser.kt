@@ -16,6 +16,9 @@ interface XtreamParser {
 
 	suspend fun getXtreamOutput(input: XtreamInput): XtreamOutput
 
+	fun clearHttpStatusHistory() {}
+	fun drainHttpStatusHistory(): List<Int> = emptyList()
+
 	companion object {
 		fun createInfoUrl(
 			basicUrl: String,
